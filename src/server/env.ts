@@ -70,9 +70,7 @@ export const env = skipValidation
       .parse(process.env);
 
 export const demoLoginEnabled =
-  !skipValidation &&
-  env.DEMO_LOGIN_ENABLED &&
-  (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
+  !skipValidation && env.DEMO_LOGIN_ENABLED && (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
 export const isProduction = env.NODE_ENV === "production";
 export const oidcEnabled = Boolean(env.OIDC_DISCOVERY_URL && env.OIDC_CLIENT_ID);
 export const llmEnabled = Boolean(env.OPENROUTER_API_KEY);

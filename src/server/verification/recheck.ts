@@ -10,12 +10,12 @@
  *   VERIFIED → (fail) → STALE → (fail) → UNVERIFIED
  *   VERIFIED → (fail) → STALE → (pass) → VERIFIED
  */
-import { and, eq, lt, or, sql, inArray } from "drizzle-orm";
+import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { artifacts } from "../db/schema";
 import { logger } from "../logger";
 import { enqueue } from "../queue";
-import { transitionArtifact, getRealDeps, LifecycleError } from "./lifecycle";
+import { getRealDeps, LifecycleError, transitionArtifact } from "./lifecycle";
 
 /* ────────────────── Constants ────────────────── */
 
@@ -205,10 +205,7 @@ export async function handleRecheckOutcome(
 
 /* ────────────────── Kind inference ────────────────── */
 
-function inferVerificationKind(
-  artifactKind: string,
-  sourceUrl: string | null,
-): "github" | "crossref" | "link" | null {
+function inferVerificationKind(artifactKind: string, sourceUrl: string | null): "github" | "crossref" | "link" | null {
   if (!sourceUrl) return null;
   const url = sourceUrl.toLowerCase();
 

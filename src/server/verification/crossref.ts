@@ -171,10 +171,7 @@ interface CrossrefResponse {
 /**
  * Looks up a DOI via the Crossref REST API and checks author-name match.
  */
-export async function verifyCrossref(
-  doiInput: string,
-  studentName: string,
-): Promise<CrossrefResult> {
+export async function verifyCrossref(doiInput: string, studentName: string): Promise<CrossrefResult> {
   const doi = normalizeDoi(doiInput);
   if (!doi) {
     return { verified: false, needsReview: false, reason: "Invalid DOI format", retryable: false };
@@ -190,34 +187,82 @@ export async function verifyCrossref(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("abort") || msg.includes("timeout")) {
-      return { verified: false, needsReview: false, reason: "Crossref API request timed out", retryable: true, errorCategory: "network" };
+      return {
+        verified: false,
+        needsReview: false,
+        reason: "Crossref API request timed out",
+        retryable: true,
+        errorCategory: "network",
+      };
     }
-    return { verified: false, needsReview: false, reason: "Network error reaching Crossref API", retryable: true, errorCategory: "network" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "Network error reaching Crossref API",
+      retryable: true,
+      errorCategory: "network",
+    };
   }
 
   if (res.status === 404) {
-    return { verified: false, needsReview: false, reason: "DOI not found in Crossref", retryable: false, errorCategory: "not_found" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "DOI not found in Crossref",
+      retryable: false,
+      errorCategory: "not_found",
+    };
   }
   if (res.status === 429) {
-    return { verified: false, needsReview: false, reason: "Crossref API rate limit reached", retryable: true, errorCategory: "rate_limit" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "Crossref API rate limit reached",
+      retryable: true,
+      errorCategory: "rate_limit",
+    };
   }
   if (res.status >= 500) {
-    return { verified: false, needsReview: false, reason: `Crossref server error (${res.status})`, retryable: true, errorCategory: "server" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: `Crossref server error (${res.status})`,
+      retryable: true,
+      errorCategory: "server",
+    };
   }
   if (!res.ok) {
-    return { verified: false, needsReview: false, reason: `Crossref API error (${res.status})`, retryable: false, errorCategory: "malformed" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: `Crossref API error (${res.status})`,
+      retryable: false,
+      errorCategory: "malformed",
+    };
   }
 
   let body: CrossrefResponse;
   try {
     body = (await res.json()) as CrossrefResponse;
   } catch {
-    return { verified: false, needsReview: false, reason: "Malformed Crossref response", retryable: true, errorCategory: "malformed" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "Malformed Crossref response",
+      retryable: true,
+      errorCategory: "malformed",
+    };
   }
 
   const work = body.message;
   if (!work) {
-    return { verified: false, needsReview: false, reason: "Empty Crossref response", retryable: false, errorCategory: "malformed" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "Empty Crossref response",
+      retryable: false,
+      errorCategory: "malformed",
+    };
   }
 
   // Extract metadata

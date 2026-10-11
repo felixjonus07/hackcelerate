@@ -99,10 +99,7 @@ export interface BurstCommitInput {
  * Flags repositories with suspicious commit bursts.
  * §6.3: 25+ commits in one minute, or 80% of commits in 24h with no earlier activity.
  */
-export function checkBurstCommits(
-  input: BurstCommitInput,
-  policy: Pick<Policy, "integrity">,
-): IntegrityFlag[] {
+export function checkBurstCommits(input: BurstCommitInput, policy: Pick<Policy, "integrity">): IntegrityFlag[] {
   const flags: IntegrityFlag[] = [];
   const { commits } = input;
 
@@ -156,7 +153,7 @@ export function checkBurstCommits(
     const share = inWindow / totalCommits;
 
     // "No earlier activity" means the window starts at or near the first commit
-    const noEarlierActivity = i === 0 || (sorted[i].ts - firstTs) < 60_000;
+    const noEarlierActivity = i === 0 || sorted[i].ts - firstTs < 60_000;
 
     if (share >= burstShare24h && noEarlierActivity && totalCommits >= 5) {
       flags.push({
@@ -204,9 +201,7 @@ export function checkDuplicateClaims(claims: ClaimInput[]): IntegrityFlag[] {
     if (uniqueStudents.size < 2) continue;
 
     for (const claim of group) {
-      const otherStudents = group
-        .filter((c) => c.studentId !== claim.studentId)
-        .map((c) => c.studentId);
+      const otherStudents = group.filter((c) => c.studentId !== claim.studentId).map((c) => c.studentId);
 
       flags.push({
         check: "duplicate_claim",
@@ -311,9 +306,7 @@ export function checkReusedText(evidence: TextEvidenceInput[]): IntegrityFlag[] 
     if (uniqueStudents.size < 2) continue;
 
     for (const evidence of group) {
-      const otherStudents = group
-        .filter((e) => e.studentId !== evidence.studentId)
-        .map((e) => e.studentId);
+      const otherStudents = group.filter((e) => e.studentId !== evidence.studentId).map((e) => e.studentId);
 
       flags.push({
         check: "reused_text",
