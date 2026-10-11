@@ -4,6 +4,7 @@ import { audit } from "@/server/audit/log";
 import { requireApiUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { policyVersions } from "@/server/db/schema";
+import { clearPolicyCache } from "@/server/policy/load";
 
 /**
  * POST /api/v1/admin/policy/versions/{v}/activate — records an approval; the
@@ -29,6 +30,9 @@ export const POST = handle(async (_req: Request, ctx: { params: Promise<{ v: str
       })
       .where(eq(policyVersions.version, v));
   });
+  if (activate) {
+    clearPolicyCache();
+  }
   await audit({
     actorUserId: user.id,
     actorRole: user.role,

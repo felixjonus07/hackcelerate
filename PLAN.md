@@ -92,16 +92,16 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 
 **Goal:** every §4.1 entity persisted with the §4.3 data-quality rules; the policy file is the only home for numbers.
 
-- [ ] Review `src/server/db/schema/*` against §4.1; add missing columns (e.g. `Student.dateOfBirth` for the under-18 check §4.3)
-- [ ] Policy lifecycle: `policy_versions` table with status `DRAFT → ACTIVE → RETIRED`, effective date, two-approval record for persona changes (§3.3)
-- [ ] `src/server/policy/load.ts`: load active version from DB, fall back to `policy/2026.10-v1.json`; Zod-validate; weights per track sum to 100
-- [ ] Evaluations immutable: DB trigger rejecting `UPDATE`/`DELETE` on `evaluations` (like `audit_events`)
-- [ ] Data-quality validators (§4.3) as pure functions in `src/server/ingestion/quality.ts` with tests
-- [ ] ERP CSV import job (`src/server/ingestion/erp.ts`): column mapping, checksum vs previous night, reject rows with bad roll numbers, mark stale on missing file
-- [ ] Expand seed to 60 synthetic students across 7 departments; every record labelled synthetic
-- [ ] pgvector: seed `remediation_library` and `opportunities` with embeddings (skip embeddings when no API key)
+- [x] Review `src/server/db/schema/*` against §4.1; add missing columns (e.g. `Student.dateOfBirth` for the under-18 check §4.3)
+- [x] Policy lifecycle: `policy_versions` table with status `DRAFT → ACTIVE → RETIRED`, effective date, two-approval record for persona changes (§3.3)
+- [x] `src/server/policy/load.ts`: load active version from DB, fall back to `policy/2026.10-v1.json`; Zod-validate; weights per track sum to 100
+- [x] Evaluations immutable: DB trigger rejecting `UPDATE`/`DELETE` on `evaluations` (like `audit_events`)
+- [x] Data-quality validators (§4.3) as pure functions in `src/server/ingestion/quality.ts` with tests
+- [x] ERP CSV import job (`src/server/ingestion/erp.ts`): column mapping, checksum vs previous night, reject rows with bad roll numbers, mark stale on missing file
+- [x] Expand seed to 60 synthetic students across 7 departments; every record labelled synthetic
+- [x] pgvector: seed `remediation_library` and `opportunities` with embeddings (skip embeddings when no API key)
 
-**Exit gate:** `npm run db:reset` builds from scratch; quality-rule tests cover every row of §4.3; policy loader rejects a file whose weights don't sum to 100.
+**Exit gate:** `npm run db:reset` builds from scratch; quality-rule tests cover every row of §4.3; policy loader rejects a file whose weights don't sum to 100. [MET]
 
 ---
 

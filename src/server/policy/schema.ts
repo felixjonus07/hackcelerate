@@ -87,10 +87,14 @@ export const policySchema = z.object({
     watch_band_pct: z.tuple([z.number(), z.number()]),
   }),
   readiness_default: z.number().min(0).max(100),
-  aeg_bands: z.object({
-    moderate_from: z.number(),
-    critical_from: z.number(),
-  }),
+  aeg_bands: z
+    .object({
+      moderate_from: z.number().min(0).max(1),
+      critical_from: z.number().min(0).max(1),
+    })
+    .refine((b) => b.critical_from > b.moderate_from, {
+      message: "critical_from must be greater than moderate_from (§7.2)",
+    }),
   personas: z.object({
     false_positive_high_flyer: z.object({
       cgpa_min: z.number(),

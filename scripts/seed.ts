@@ -12,6 +12,8 @@ import { redis } from "../src/server/cache/redis";
 import { db, pg } from "../src/server/db";
 import * as t from "../src/server/db/schema";
 import type { Role } from "../src/server/db/schema/enums";
+import { embed } from "../src/server/embeddings";
+import { llmEnabled } from "../src/server/env";
 import { loadPolicyFile } from "../src/server/policy/load";
 import type { TrackId, VerificationStatus } from "../src/server/policy/schema";
 import { CS_44, EE_12, ME_27, SEED_RECORDS } from "../src/server/rules/fixtures";
@@ -430,9 +432,10 @@ async function main() {
   );
   await db.insert(t.policyVersions).values({
     version: policy.policy_version,
-    status: "DRAFT",
+    status: "ACTIVE",
     effectiveFrom: new Date(policy.effective_from),
     document: policy,
+    activatedAt: new Date(),
   });
 
   const staffIds: Record<string, string> = {};
@@ -464,6 +467,13 @@ async function main() {
   console.log(`Inserting ${records.length} synthetic students…`);
   const studentIds: string[] = [];
   for (const [i, { facts: f, name, userId }] of records.entries()) {
+    // 2 students tested under 18 (born in 2009 -> age 17 in Oct 2026) for parental consent
+    const isUnder18Test = i === 7 || i === 8;
+    const birthYear = isUnder18Test ? 2009 : 2026 - (17 + f.year);
+    const month = String(1 + (i % 12)).padStart(2, "0");
+    const day = String(1 + ((i * 3) % 28)).padStart(2, "0");
+    const dobString = `${birthYear}-${month}-${day}`;
+
     const [s] = await db
       .insert(t.students)
       .values({
@@ -476,6 +486,8 @@ async function main() {
         cgpa: f.cgpa,
         attendancePct: f.attendancePct,
         activeBacklogs: f.activeBacklogs ?? 0,
+        dateOfBirth: dobString,
+        parentalConsentRequired: isUnder18Test,
         isSynthetic: true,
         signals: {
           artifactScore: f.artifactScore ?? null,
@@ -607,6 +619,20 @@ async function main() {
       verifiedAt: new Date(),
     },
   ]);
+
+  if (llmEnabled) {
+    console.log("Generating pgvector embeddings for remediation library and opportunities…");
+    const remRows = await db.select().from(t.remediationLibrary);
+    for (const row of remRows) {
+      const v = await embed(`${row.title}. ${row.action}`);
+      if (v) await db.update(t.remediationLibrary).set({ embedding: v }).where(sql`id = ${row.id}`);
+    }
+    const oppRows = await db.select().from(t.opportunities);
+    for (const row of oppRows) {
+      const v = await embed(`${row.title}. ${row.description ?? ""}`);
+      if (v) await db.update(t.opportunities).set({ embedding: v }).where(sql`id = ${row.id}`);
+    }
+  }
 
   // Demo consent: ME-27 shares academic + evidence with placement.
   await db.insert(t.consentRecords).values([

@@ -57,6 +57,9 @@ export const students = pgTable(
     }),
     activeBacklogs: integer("active_backlogs").notNull().default(0),
     dateOfBirth: date("date_of_birth"),
+    /** DPDP Act 2023 / §4.3: true if student was under 18 at onboarding. */
+    parentalConsentRequired: boolean("parental_consent_required").notNull().default(false),
+    parentalConsentAt: timestamp("parental_consent_at", { withTimezone: true }),
     isSynthetic: boolean("is_synthetic").notNull().default(false),
     /**
      * Snapshot of ingestion-derived signals the rubric reads (activity counts,
