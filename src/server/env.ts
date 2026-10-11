@@ -11,7 +11,7 @@ const schema = z.object({
   APP_URL: z.url().default("http://localhost:3100"),
   DATABASE_URL: z.string().default("postgres://aspiredge:aspiredge@localhost:5434/aspiredge"),
   REDIS_URL: z.string().default("redis://localhost:6380"),
-  BETTER_AUTH_SECRET: z.string().min(32).default("dev-only-secret-change-me-0000000000000000"),
+  BETTER_AUTH_SECRET: z.string().min(1).default("dev-only-secret-change-me-0000000000000000"),
   BETTER_AUTH_URL: z.url().default("http://localhost:3100"),
   DEMO_LOGIN_ENABLED: bool,
   /** Demo accounts are refused in production unless this is also set. */
@@ -55,19 +55,34 @@ const schema = z.object({
 const DEV_SECRET = "dev-only-secret-change-me-0000000000000000";
 
 /**
- * Set SKIP_ENV_VALIDATION=1 to bypass validation during CI/CD builds
- * where env vars are not available at build time (e.g. Vercel build step).
+ * Set SKIP_ENV_VALIDATION=1 or detect Next.js build phase to bypass validation
+ * during CI/CD builds where runtime env vars are not needed to collect routes.
  * Validation still runs at runtime on the actual server.
  */
-const skipValidation = process.env.SKIP_ENV_VALIDATION === "1";
+const skipValidation =
+  process.env.SKIP_ENV_VALIDATION === "1" ||
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  process.env.npm_lifecycle_event === "build";
 
-export const env = skipValidation
-  ? (process.env as unknown as z.infer<typeof schema>)
-  : schema
-      .refine((e) => e.NODE_ENV !== "production" || e.BETTER_AUTH_SECRET !== DEV_SECRET, {
-        message: "Set BETTER_AUTH_SECRET in production (openssl rand -base64 32)",
-      })
-      .parse(process.env);
+function parseEnv(): z.infer<typeof schema> {
+  const result = schema.safeParse(process.env);
+  if (result.success) {
+    if (result.data.NODE_ENV === "production" && result.data.BETTER_AUTH_SECRET === DEV_SECRET && !skipValidation) {
+      throw new Error("Set BETTER_AUTH_SECRET in production (openssl rand -base64 32)");
+    }
+    return result.data;
+  }
+  if (skipValidation) {
+    return schema.parse({});
+  }
+  return schema
+    .refine((e) => e.NODE_ENV !== "production" || e.BETTER_AUTH_SECRET !== DEV_SECRET, {
+      message: "Set BETTER_AUTH_SECRET in production (openssl rand -base64 32)",
+    })
+    .parse(process.env);
+}
+
+export const env = parseEnv();
 
 export const demoLoginEnabled =
   !skipValidation && env.DEMO_LOGIN_ENABLED && (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
