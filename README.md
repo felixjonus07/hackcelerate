@@ -197,6 +197,13 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
 - Added comprehensive rubric specification suite (`src/server/rules/__tests__/rubrics.test.ts`, 10 tests) and fast-check property testing suite (`src/server/rules/__tests__/properties.test.ts`, 21,000 runs) proving score boundedness in [0, 100] and monotonicity (adding verified evidence never lowers a score, §15.1).
 - Reviewed rendered UI with Playwright CLI at desktop (1440) and mobile (390) viewports with zero horizontal overflow.
 
+### 2026-10-11: Phase 4 — AEG engine, personas, trends, routing completion (§7, §8.1, §3.3, §20, Appendix D)
+- Added institution holiday calendar to policy schema (`src/server/policy/schema.ts`) and policy file (`policy/2026.10-v1.json`).
+- Upgraded working-day SLA calculator (`src/server/services/time.ts`) with weekend skipping, institution holiday calendar integration, and bidirectional duration utilities (`addWorkingDays`, `workingDaysUntil`, `isWorkingDay`). Integrated calendar into intervention SLA generation (`src/server/services/evaluations.ts`).
+- Added automatic re-evaluation trigger when a policy version activates (`src/app/api/v1/admin/policy/versions/[v]/activate/route.ts`, §3.3) enqueuing BullMQ evaluation jobs for all students with reason `policy_change`.
+- Expanded golden evaluation tests (`src/server/rules/__tests__/golden.test.ts`) covering all Appendix D synthetic seed records (`SYN-01` through `SYN-07`), worked examples `CS-44` and `EE-12`, with persona triggers, index floors, and SLA calendar math.
+- Added tests in `src/server/services/__tests__/time.test.ts` and `src/server/policy/__tests__/activation-trigger.test.ts` (197 tests passing across the entire suite).
+
 ### 2026-10-11: Phase 3 — Evidence verification layer completion (§6)
 - Implemented artifact status lifecycle (§6.1) in `src/server/verification/lifecycle.ts` with strict allowed transitions table, transaction atomicity, actor attribution, and append-only audit event logging on every status change.
 - Added asynchronous verification workers integrated with BullMQ queue (`src/server/verification/`):

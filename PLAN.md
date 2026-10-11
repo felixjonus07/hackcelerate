@@ -155,11 +155,11 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Trend engine: least-squares slope over 4 weeks, thresholds, INSUFFICIENT_DATA (§7.5)
 - [x] Pivot advisory (§7.6) — rule-based, never automatic
 - [x] Routing table (§8.1): recipient, approver, SLA, escalation, closure rule — from policy
-- [ ] Working-day SLA calculator with institution holiday calendar
-- [ ] Re-evaluation trigger when a policy version changes (§3.3)
-- [ ] Golden tests: SYN-01…07 expected personas and index floors (Appendix D), CS-44 and EE-12 (§20.3–20.4)
+- [x] Working-day SLA calculator with institution holiday calendar
+- [x] Re-evaluation trigger when a policy version changes (§3.3)
+- [x] Golden tests: SYN-01…07 expected personas and index floors (Appendix D), CS-44 and EE-12 (§20.3–20.4)
 
-**Exit gate:** all Appendix D seed records produce their expected persona and index.
+**Exit gate:** all Appendix D seed records produce their expected persona and index. [MET]
 
 ---
 
