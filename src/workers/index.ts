@@ -15,6 +15,7 @@ import { logger } from "../server/logger";
 import { enqueue, getQueue, type JobPayloads, QUEUES } from "../server/queue";
 import { runEvaluation } from "../server/services/evaluations";
 import { verifyArtifact } from "../server/verification";
+import { runRecheckScheduler } from "../server/verification/recheck";
 
 const connection = createRedis();
 const concurrency = 8; // §10.3: nightly batch at concurrency 8
@@ -33,7 +34,7 @@ const workers = [
 
   new Worker<JobPayloads["verification"]>(
     QUEUES.verification,
-    async (job: Job) => verifyArtifact(job.data.artifactId, job.data.kind),
+    async (job: Job) => verifyArtifact(job.data.artifactId, job.data.kind, job.data.attempt),
     { connection, concurrency: 4 },
   ),
 
@@ -62,7 +63,14 @@ const workers = [
   new Worker<JobPayloads["maintenance"]>(
     QUEUES.maintenance,
     async (job: Job) => {
-      logger.info({ task: job.data.task }, "maintenance task not implemented yet (PLAN.md Phases 6, 9)");
+      switch (job.data.task) {
+        case "recheck_evidence": {
+          const result = await runRecheckScheduler();
+          return result;
+        }
+        default:
+          logger.info({ task: job.data.task }, "maintenance task not implemented yet (PLAN.md Phases 6, 9)");
+      }
     },
     { connection },
   ),
@@ -88,6 +96,15 @@ async function start() {
     { pattern: "0 2 * * *", tz: "Asia/Kolkata" },
     { name: "ingestion", data: { source: "erp_nightly" } },
   );
+
+  // Evidence recheck every day at 03:00 IST (§6.2, §15).
+  // The scheduler itself checks which artifacts are ≥30 days stale.
+  await getQueue("maintenance").upsertJobScheduler(
+    "evidence-recheck",
+    { pattern: "0 3 * * *", tz: "Asia/Kolkata" },
+    { name: "maintenance", data: { task: "recheck_evidence" } },
+  );
+
   logger.info({ queues: Object.values(QUEUES) }, "workers started");
 }
 
