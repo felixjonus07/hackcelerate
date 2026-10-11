@@ -43,6 +43,13 @@ const schema = z.object({
   GITHUB_TOKEN: z.string().optional().default(""),
   CROSSREF_MAILTO: z.string().optional().default(""),
   POLICY_FILE: z.string().default("policy/2026.10-v1.json"),
+  // S3-compatible object storage for evidence uploads (§13.3, Phase 3).
+  // All five must be set for S3; otherwise a local filesystem fallback is used.
+  S3_ENDPOINT: z.string().optional().default(""),
+  S3_BUCKET: z.string().optional().default(""),
+  S3_REGION: z.string().optional().default(""),
+  S3_ACCESS_KEY_ID: z.string().optional().default(""),
+  S3_SECRET_ACCESS_KEY: z.string().optional().default(""),
 });
 
 const DEV_SECRET = "dev-only-secret-change-me-0000000000000000";
