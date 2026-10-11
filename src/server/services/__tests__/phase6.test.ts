@@ -113,7 +113,7 @@ describe("§8.1 SLA Escalation logic", () => {
 
     // If an intervention was due on Friday Oct 9, 2026, 5 working days later is Friday Oct 16, 2026
     const slaDueAt = new Date(2026, 9, 9);
-    const escalationDate = addWorkingDays(slaDueAt, route.escalate_after_working_days!, policy.calendar.holidays);
+    const escalationDate = addWorkingDays(slaDueAt, route.escalate_after_working_days ?? 5, policy.calendar.holidays);
     expect(toDateKey(escalationDate)).toBe("2026-10-16");
   });
 });

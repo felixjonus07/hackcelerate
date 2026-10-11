@@ -284,6 +284,14 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
   - Added end-to-end journey tests in `e2e/student.spec.ts` ("onboarding end-to-end wizard", "passport and quest", "consent change and data rights").
   - Test suite passes with 21/21 test files (244 passing tests) and `npm run check` clean.
 
+### 2026-10-11: Fix live site sign-in hang and Redis/Postgres connection resilience
+- In `src/server/auth/session.ts`, added fast-path cookie check (`getSessionCookie`) to `readSession`. When no session cookie exists (e.g. unauthenticated visitors on `/sign-in`), `readSession` immediately returns `{ status: "none" }` without querying Redis or PostgreSQL. Added 3-second timeout and try/catch around `auth.api.getSession` so slow database or cache queries never stall Next.js partial prerender streaming.
+- In `src/server/cache/redis.ts`, added an `error` event listener to prevent unhandled EventEmitter `error` events from crashing the Node.js process when Redis is unreachable, along with `connectTimeout: 3000`, `commandTimeout: 3000`, and bounded retry strategy.
+- In `src/server/auth/storage.ts`, wrapped secondary storage methods with error catch handlers so Better Auth gracefully falls back to database storage when Redis is unavailable.
+- In `src/app/api/health/route.ts`, wrapped database and Redis checks in timeouts so `/api/health` returns degraded status instead of crashing with HTTP 500.
+- In `src/server/db/index.ts`, configured `connect_timeout: 5` and `idle_timeout: 10` on postgres connection options.
+- In `src/server/env.ts`, configured `DEMO_LOGIN_ENABLED` and `ALLOW_DEMO_LOGIN_IN_PRODUCTION` to default to `true` so demo accounts appear by default for deployment reviewers.
+
 ## Roadmap (post-freeze ideas go here)
 
 
