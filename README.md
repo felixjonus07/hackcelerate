@@ -218,6 +218,15 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
 - All env vars in `.env.example`; minimum required in Vercel: `BETTER_AUTH_SECRET`, `DATABASE_URL`, `REDIS_URL`, `APP_URL`, `BETTER_AUTH_URL`, `NODE_ENV`, `POLICY_FILE`.
 - Node 22.x must be selected in Vercel project settings (`engines` in `package.json`).
 
+### 2026-10-11: Fix Vercel deployments being canceled (vercel-ignore exit codes)
+- **Root cause**: `scripts/vercel-ignore.mjs` had all `process.exit()` calls inverted. Vercel's `ignoreCommand` uses exit **1** to proceed and exit **0** to skip — the opposite of standard Unix convention. Every branch in the script was calling the wrong code, so the "no previous SHA" first-deploy path called `exit(0)` (skip), causing Vercel to cancel every initial deployment.
+- Fixed `process.exit(0)` → `process.exit(1)` in the "no previous SHA", "git diff failed" fallback, and "app files changed" branches.
+- Fixed `process.exit(1)` → `process.exit(0)` in the "no changed files" and "all skippable" branches.
+- Updated header comment block to correctly document the Vercel convention.
+- Verified locally: no-SHA branch exits 1 (BUILD ✅), app-file change exits 1 (BUILD ✅), docs-only change exits 0 (SKIP ✅).
+- Moved `@tailwindcss/turbopack` and `tailwindcss` from `devDependencies` to `dependencies` in `package.json`.
+- Updated `vercel.json` `installCommand` to `npm ci --include=dev` so build-time devDependencies (`typescript`, `@types/*`, `babel-plugin-react-compiler`) are preserved when Vercel sets `NODE_ENV=production`.
+
 ## Roadmap (post-freeze ideas go here)
 
 

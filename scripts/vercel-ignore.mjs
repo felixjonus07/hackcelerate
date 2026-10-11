@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 /**
- * Vercel Ignore Build Script
- * Exit 0 → proceed with build
- * Exit 1 → skip build (saves free-plan build minutes)
+ * Vercel Ignored Build Step script (ignoreCommand in vercel.json)
+ *
+ * NOTE: Vercel's ignoreCommand exit-code convention is the INVERSE of
+ *       standard Unix conventions:
+ *
+ *   Exit 1 → BUILD   (Vercel: "yes, deploy this")
+ *   Exit 0 → SKIP    (Vercel: "nothing to deploy, cancel")
  *
  * Skips builds when ONLY these paths changed (docs, config, markdown, etc.)
  * Always builds when src/, public/, package.json, next.config.ts, etc. change.
@@ -34,9 +38,9 @@ function getChangedFiles() {
     const head = process.env.VERCEL_GIT_COMMIT_SHA || "HEAD";
 
     if (!base) {
-      // No previous deploy found — always build (e.g. first deploy)
+      // No previous deploy found — always build (e.g. first deploy or redeployment)
       console.log("No previous SHA found — proceeding with build.");
-      process.exit(0);
+      process.exit(1); // exit 1 = BUILD
     }
 
     const diff = execSync(`git diff --name-only ${base} ${head}`, {
@@ -45,14 +49,14 @@ function getChangedFiles() {
 
     if (!diff) {
       console.log("No changed files detected — skipping build.");
-      process.exit(1);
+      process.exit(0); // exit 0 = SKIP
     }
 
     return diff.split("\n").filter(Boolean);
   } catch (err) {
     // If git diff fails for any reason, be safe and build
     console.error("git diff failed:", err.message);
-    process.exit(0);
+    process.exit(1); // exit 1 = BUILD (safe fallback)
   }
 }
 
@@ -63,8 +67,9 @@ const allSkippable = changed.every((file) => SKIP_PATTERNS.some((pattern) => pat
 
 if (allSkippable) {
   console.log("All changes are in non-app files — skipping build. ✓");
-  process.exit(1); // Tell Vercel: skip this build
+  process.exit(0); // exit 0 = SKIP
 } else {
   console.log("App files changed — proceeding with build. ✓");
-  process.exit(0); // Tell Vercel: build it
+  process.exit(1); // exit 1 = BUILD
 }
+
