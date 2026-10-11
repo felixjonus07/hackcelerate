@@ -23,7 +23,7 @@ export interface JobPayloads {
   evaluation: {
     studentId: string;
     requestedBy: string;
-    reason: "run_eval" | "nightly" | "policy_change" | "evidence_added";
+    reason: "run_eval" | "nightly" | "policy_change" | "evidence_added" | "erp_import";
   };
   verification: {
     artifactId: string;
@@ -32,7 +32,7 @@ export interface JobPayloads {
   };
   ingestion: { source: "erp_nightly" | "manual"; filePath?: string };
   maintenance: {
-    task: "sla_escalation" | "quest_expiry" | "retention" | "recheck_evidence";
+    task: import("../services/maintenance").MaintenanceTask;
   };
   embeddings: { table: "opportunities" | "remediation_library"; id: string };
 }

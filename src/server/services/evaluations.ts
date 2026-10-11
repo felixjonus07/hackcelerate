@@ -5,28 +5,50 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { departments, evaluations, interventions, quests, remediationLibrary, students } from "../db/schema";
+import {
+  departments,
+  evaluations,
+  interventions,
+  quests,
+  remediationLibrary,
+  studentIdentities,
+  students,
+} from "../db/schema";
 import type { Role } from "../db/schema/enums";
+import { type Embedder, nearestOpportunity, remediationDistances } from "../embeddings";
 import { generateNarrative } from "../llm/narrative";
 import { getActivePolicy } from "../policy/load";
 import { evaluate } from "../rules";
+import { addWorkingDays } from "../rules/calendar";
 import { loadStudentFacts } from "./facts";
-import { addWorkingDays } from "./time";
+import { assertMayProcess } from "./parental";
+import { selectRemediation } from "./remediation";
 
-export async function runEvaluation(studentId: string, opts: { actorUserId?: string; now?: Date } = {}) {
-  const policy = getActivePolicy();
+export async function runEvaluation(
+  studentId: string,
+  opts: { actorUserId?: string; now?: Date; embedder?: Embedder } = {},
+) {
+  const policy = await getActivePolicy();
   const now = opts.now ?? new Date();
-  const facts = await loadStudentFacts(studentId);
+  // §4.3, §13.4: nothing is processed for a student under 18 until a parent's consent is verified.
+  await assertMayProcess(studentId, now);
+  const facts = await loadStudentFacts(studentId, { asOf: now });
   const result = evaluate(facts, policy);
   const [student] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
+  const [identity] = await db
+    .select()
+    .from(studentIdentities)
+    .where(eq(studentIdentities.studentId, studentId))
+    .limit(1);
   const [dept] = await db.select().from(departments).where(eq(departments.code, student.departmentCode)).limit(1);
 
-  // Remediation items for the largest weighted gaps (pgvector ranking is Phase 1).
-  const gapComponents = result.trackScore.components
+  // Remediation items for the largest weighted gaps (§9.1). Rules pick the components; pgvector orders the rest.
+  const gapped = result.trackScore.components
     .filter((c) => c.dataGaps.length > 0 || c.score < 60)
-    .sort((a, b) => b.weight * (100 - b.score) - a.weight * (100 - a.score))
-    .map((c) => c.key);
-  const remediation = gapComponents.length
+    .sort((a, b) => b.weight * (100 - b.score) - a.weight * (100 - a.score));
+  const gapComponents = gapped.map((c) => c.key);
+  const missingItems = new Set(gapped.flatMap((c) => c.missingItems ?? []));
+  const candidates = gapComponents.length
     ? (
         await db
           .select()
@@ -37,11 +59,21 @@ export async function runEvaluation(studentId: string, opts: { actorUserId?: str
               inArray(remediationLibrary.componentKey, gapComponents),
             ),
           )
-      )
-        .filter((r) => !r.departmentCode || r.departmentCode === student.departmentCode)
-        .sort((a, b) => gapComponents.indexOf(a.componentKey) - gapComponents.indexOf(b.componentKey))
-        .slice(0, 3)
+      ).filter((r) => !r.departmentCode || r.departmentCode === student.departmentCode)
     : [];
+  const gapText = gapped.map((c) => `${c.label}: ${c.dataGaps.join("; ") || "score below target"}`).join(". ");
+  const distances = await remediationDistances(
+    candidates.map((c) => c.id),
+    gapText,
+    opts.embedder,
+  );
+  const remediation = selectRemediation(
+    candidates,
+    gapComponents,
+    missingItems,
+    distances,
+    policy.llm.max_action_steps,
+  );
 
   const inputHash = createHash("sha256")
     .update(JSON.stringify([facts, policy.policy_version]))
@@ -52,6 +84,7 @@ export async function runEvaluation(studentId: string, opts: { actorUserId?: str
       evaluationId,
       pseudonymousId: student.pseudonymousId,
       departmentName: dept?.name ?? student.departmentCode,
+      redactNames: identity ? identity.displayName.split(/\s+/) : [],
       evaluation: result,
       evidence: facts.evidence,
       remediation: remediation.map((r) => ({
@@ -63,6 +96,13 @@ export async function runEvaluation(studentId: string, opts: { actorUserId?: str
     },
     policy,
   );
+
+  // A verified, still-open opportunity close to each chosen step, when embeddings exist (§3.2).
+  const opportunityFor = new Map<string, string>();
+  for (const r of remediation) {
+    const o = await nearestOpportunity(result.trackScore.track, `${r.title}. ${r.action}`, now, opts.embedder);
+    if (o) opportunityFor.set(r.id, o.id);
+  }
 
   return db.transaction(async (tx) => {
     const [row] = await tx
@@ -116,7 +156,7 @@ export async function runEvaluation(studentId: string, opts: { actorUserId?: str
         copyRoles: r.copyRoles,
         queued: r.queued,
         proposedMessage: narrative.narrative.prescriptive_action_plan[0]?.action ?? r.label,
-        slaDueAt: addWorkingDays(now, r.slaWorkingDays),
+        slaDueAt: addWorkingDays(now, r.slaWorkingDays, policy.calendar),
         closureRule: r.closure,
       });
     }
@@ -124,6 +164,7 @@ export async function runEvaluation(studentId: string, opts: { actorUserId?: str
     await tx.delete(quests).where(and(eq(quests.studentId, studentId), eq(quests.status, "PROPOSED")));
     for (const r of remediation) {
       await tx.insert(quests).values({
+        opportunityId: opportunityFor.get(r.id) ?? null,
         studentId,
         evaluationId: row.id,
         title: r.title,

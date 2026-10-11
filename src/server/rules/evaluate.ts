@@ -27,6 +27,7 @@ export function evaluate(facts: StudentFacts, policy: Policy, opts: { fallbackTr
     policyVersion: policy.policy_version,
     engineVersion: RULES_ENGINE_VERSION,
     trackScore,
+    scoreShown: trackScore.gateFailed === null,
     readiness,
     gapRatio: ratio,
     gapIndex: gIndex,

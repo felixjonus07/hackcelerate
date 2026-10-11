@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "body": {
+    "full_name": "vercel/next.js",
+    "name": "next.js",
+    "private": false,
+    "fork": false,
+    "created_at": "2016-10-05T23:32:51Z",
+    "pushed_at": "2026-10-11T16:41:31Z",
+    "default_branch": "canary",
+    "html_url": "https://github.com/vercel/next.js",
+    "owner": {
+      "login": "vercel",
+      "type": "Organization"
+    }
+  }
+}

@@ -49,8 +49,9 @@ export function TrackDonut({ data }: { data: { name: string; value: number }[] }
         <div className="mt-2 grid items-center gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
           <div className="h-[200px]" aria-hidden>
             <ResponsiveContainer>
-              <PieChart>
+              <PieChart accessibilityLayer={false}>
                 <Pie
+                  rootTabIndex={-1}
                   data={data}
                   dataKey="value"
                   nameKey="name"

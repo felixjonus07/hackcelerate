@@ -22,9 +22,15 @@ export const policyVersions = pgTable("policy_versions", {
   effectiveFrom: timestamp("effective_from", { withTimezone: true }).notNull(),
   document: jsonb("document").notNull(),
   createdBy: text("created_by").references(() => user.id),
-  /** Two approvals required for persona changes (§3.3). */
+  /** Two approvals required for persona changes (§3.3); both are stored with the version. */
   approvals: jsonb("approvals").$type<{ userId: string; role: string; at: string }[]>().notNull().default([]),
+  /** Set when the draft is created, by comparing it with the version in force. */
+  requiresTwoApprovals: boolean("requires_two_approvals").notNull().default(true),
+  /** Top-level sections that differ from the version in force; printed in the next audit report. */
+  changedSections: jsonb("changed_sections").$type<string[]>().notNull().default([]),
+  supersedes: text("supersedes"),
   activatedAt: timestamp("activated_at", { withTimezone: true }),
+  retiredAt: timestamp("retired_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -106,6 +112,13 @@ export const interventions = pgTable(
     decisionNote: text("decision_note"),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     slaDueAt: timestamp("sla_due_at", { withTimezone: true }).notNull(),
+    /** Set when the message actually went out, after the consent check (§8.1). */
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+    /** Why an approved proposal has not been sent yet, in words the approver can act on. */
+    dispatchBlockedReason: text("dispatch_blocked_reason"),
+    /** SLA escalation (§8.1): when it escalated and to which role. */
+    escalatedAt: timestamp("escalated_at", { withTimezone: true }),
+    escalatedTo: text("escalated_to"),
     closureRule: text("closure_rule").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -136,9 +149,9 @@ export const counselingCardMoves = pgTable("counseling_card_moves", {
   fromColumn: counselingColumnEnum("from_column").notNull(),
   toColumn: counselingColumnEnum("to_column").notNull(),
   reason: text("reason"),
-  actorUserId: text("actor_user_id")
-    .notNull()
-    .references(() => user.id),
+  /** Null for moves made by the system, such as an expired quest (§8.2). */
+  actorUserId: text("actor_user_id").references(() => user.id),
+  actorKind: text("actor_kind").notNull().default("user"),
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -159,5 +172,12 @@ export const quests = pgTable("quests", {
   status: questStatusEnum("status").notNull().default("PROPOSED"),
   evidenceArtifactId: uuid("evidence_artifact_id"),
   dueAt: timestamp("due_at", { withTimezone: true }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  expiredAt: timestamp("expired_at", { withTimezone: true }),
+  /** A deferred proposal stays PROPOSED and reappears on this date. */
+  deferredUntil: timestamp("deferred_until", { withTimezone: true }),
+  /** Why the last evidence did not complete the quest, shown to the student. */
+  statusNote: text("status_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

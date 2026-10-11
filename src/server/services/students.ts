@@ -84,7 +84,7 @@ export async function studentBrief(
     .select()
     .from(interventions)
     .where(and(eq(interventions.studentId, studentId), eq(interventions.status, "PENDING_APPROVAL")));
-  const policy = getActivePolicy();
+  const policy = await getActivePolicy();
   return {
     student,
     departmentName: policy.department_standards[student.departmentCode]?.name ?? student.departmentCode,

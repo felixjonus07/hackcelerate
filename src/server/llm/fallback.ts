@@ -54,7 +54,7 @@ export function templatedNarrative(input: FactsInput, policy: Policy): Narrative
         ],
     career_pivot_advisory: {
       reasoning: e.pivot.recommended
-        ? `${e.pivot.reasons.map((r, i) => `${r} [ev:pivot:${i + 1}].`).join(" ")} You choose whether to change track.`
+        ? `${e.pivot.reasons.map((r, i) => `${r} [ev:pivot:${i + 1}].`).join(" ")} You choose whether to change track [ev:gap].`
         : `No change of track is suggested at this point [ev:gap].`,
     },
   };

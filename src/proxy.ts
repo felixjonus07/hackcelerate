@@ -8,7 +8,7 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
 
-const PROTECTED = ["/student", "/admin", "/leaderboards", "/account"];
+const PROTECTED = ["/student", "/admin", "/leaderboards", "/account", "/notices"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

@@ -82,7 +82,7 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] `AGENTS.md`, `CLAUDE.md`, `PLAN.md`, `README.md`, `PRODUCT.md`, `DESIGN.md`
 - [x] Seed script with demo accounts and synthetic students (Appendix D + generated cohort)
 - [x] Playwright smoke journeys (`e2e/smoke.spec.ts`) and Playwright CLI page review
-- [ ] CI workflow (GitHub Actions: `npm ci && npm run check && npm run build`) — `parallel-safe`
+- [x] CI workflow (GitHub Actions: `npm ci && npm run check && npm run build`) — `parallel-safe`
 
 **Exit gate:** `docker compose up -d && npm run db:migrate && npm run db:seed && npm run check && npm run build` all succeed; `/sign-in` renders; a demo mentor can reach `/admin/approvals`.
 
@@ -92,14 +92,14 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 
 **Goal:** every §4.1 entity persisted with the §4.3 data-quality rules; the policy file is the only home for numbers.
 
-- [ ] Review `src/server/db/schema/*` against §4.1; add missing columns (e.g. `Student.dateOfBirth` for the under-18 check §4.3)
-- [ ] Policy lifecycle: `policy_versions` table with status `DRAFT → ACTIVE → RETIRED`, effective date, two-approval record for persona changes (§3.3)
-- [ ] `src/server/policy/load.ts`: load active version from DB, fall back to `policy/2026.10-v1.json`; Zod-validate; weights per track sum to 100
-- [ ] Evaluations immutable: DB trigger rejecting `UPDATE`/`DELETE` on `evaluations` (like `audit_events`)
-- [ ] Data-quality validators (§4.3) as pure functions in `src/server/ingestion/quality.ts` with tests
-- [ ] ERP CSV import job (`src/server/ingestion/erp.ts`): column mapping, checksum vs previous night, reject rows with bad roll numbers, mark stale on missing file
-- [ ] Expand seed to 60 synthetic students across 7 departments; every record labelled synthetic
-- [ ] pgvector: seed `remediation_library` and `opportunities` with embeddings (skip embeddings when no API key)
+- [x] Review `src/server/db/schema/*` against §4.1; add missing columns (e.g. `Student.dateOfBirth` for the under-18 check §4.3)
+- [x] Policy lifecycle: `policy_versions` table with status `DRAFT → ACTIVE → RETIRED`, effective date, two-approval record for persona changes (§3.3)
+- [x] `src/server/policy/load.ts`: load active version from DB, fall back to `policy/2026.10-v1.json`; Zod-validate; weights per track sum to 100
+- [x] Evaluations immutable: DB trigger rejecting `UPDATE`/`DELETE` on `evaluations` (like `audit_events`)
+- [x] Data-quality validators (§4.3) as pure functions in `src/server/ingestion/quality.ts` with tests
+- [x] ERP CSV import job (`src/server/ingestion/erp.ts`): column mapping, checksum vs previous night, reject rows with bad roll numbers, mark stale on missing file
+- [x] Expand seed to 60 synthetic students across 7 departments; every record labelled synthetic
+- [x] pgvector: seed `remediation_library` and `opportunities` with embeddings (skip embeddings when no API key)
 
 **Exit gate:** `npm run db:reset` builds from scratch; quality-rule tests cover every row of §4.3; policy loader rejects a file whose weights don't sum to 100.
 
@@ -114,14 +114,14 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Corporate Placement rubric incl. department standards (§5.3.1, §5.4)
 - [x] Track score + confidence (§5.6)
 - [x] Golden test: Example A ME-27 = 48.14, what-if scenarios 58.14 / 59.64 (§20.1–20.2)
-- [ ] Higher Studies & Research rubric (§5.3.2) — mixed-source lowest-multiplier rule
-- [ ] Entrepreneurship rubric (§5.3.3)
-- [ ] Public Service rubric + CGPA gate (§5.3.4)
-- [ ] Freelance & Creator rubric + attendance gate (§5.3.5)
-- [ ] Sports, Defense & NCC rubric + credits gate; BMI never output as a number (§5.3.6)
-- [ ] Gates (§5.3): a failed gate returns `gateFailed` and the UI shows "Not enough evidence yet"
-- [ ] Property tests (fast-check, 10,000 runs): scores ∈ [0,100]; adding verified evidence never lowers a score (§15.1)
-- [ ] Version stamp: `RULES_ENGINE_VERSION` recorded on every evaluation
+- [x] Higher Studies & Research rubric (§5.3.2) — mixed-source lowest-multiplier rule
+- [x] Entrepreneurship rubric (§5.3.3)
+- [x] Public Service rubric + CGPA gate (§5.3.4)
+- [x] Freelance & Creator rubric + attendance gate (§5.3.5)
+- [x] Sports, Defense & NCC rubric + credits gate; BMI never output as a number (§5.3.6)
+- [x] Gates (§5.3): a failed gate returns `gateFailed` and the UI shows "Not enough evidence yet"
+- [x] Property tests (fast-check, 10,000 runs): scores ∈ [0,100]; adding verified evidence never lowers a score (§15.1)
+- [x] Version stamp: `RULES_ENGINE_VERSION` recorded on every evaluation
 
 **Exit gate:** `npm run test -- rules` green; golden rubric tests match §20 to one decimal place.
 
@@ -131,15 +131,15 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 
 **Goal:** the §6.1 status lifecycle enforced in code; verification runs off the request path on BullMQ.
 
-- [ ] `src/server/verification/lifecycle.ts`: allowed transitions table (§6.1) + tests; every transition writes an audit event with actor and reason
-- [ ] GitHub worker: OAuth ownership, REST owner/creation/commit authorship/fork check; recheck every 30 days (§6.2)
-- [ ] Crossref DOI worker with author-name match; name variants → mentor review
-- [ ] Portfolio/link worker: HTTP live check + owner name match → `LIVE_UNVERIFIED` on login walls
-- [ ] Certificate / internship letter flows → `ATTESTED` by named reviewer
-- [ ] External mock report: 10 % random sampling per term
-- [ ] Integrity checks (§6.3): implausible speed, burst commits, duplicate claim, streak padding, reused text (content hash). Output is a **flag for review only** — never changes a score
-- [ ] Object storage (S3-compatible, private bucket, signed URLs ≤ 5 min) for uploads
-- [ ] Recheck scheduler (repeatable BullMQ jobs); STALE after one failed recheck, UNVERIFIED after two
+- [x] `src/server/verification/lifecycle.ts`: allowed transitions table (§6.1) + tests; every transition writes an audit event with actor and reason
+- [x] GitHub worker: OAuth ownership, REST owner/creation/commit authorship/fork check; recheck every 30 days (§6.2)
+- [x] Crossref DOI worker with author-name match; name variants → mentor review
+- [x] Portfolio/link worker: HTTP live check + owner name match → `LIVE_UNVERIFIED` on login walls
+- [x] Certificate / internship letter flows → `ATTESTED` by named reviewer
+- [x] External mock report: 10 % random sampling per term
+- [x] Integrity checks (§6.3): implausible speed, burst commits, duplicate claim, streak padding, reused text (content hash). Output is a **flag for review only** — never changes a score
+- [x] Object storage (S3-compatible, private bucket, signed URLs ≤ 5 min) for uploads
+- [x] Recheck scheduler (repeatable BullMQ jobs); STALE after one failed recheck, UNVERIFIED after two
 
 **Exit gate:** worker integration tests with recorded HTTP fixtures pass; transitions outside the table are rejected.
 
@@ -155,9 +155,9 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Trend engine: least-squares slope over 4 weeks, thresholds, INSUFFICIENT_DATA (§7.5)
 - [x] Pivot advisory (§7.6) — rule-based, never automatic
 - [x] Routing table (§8.1): recipient, approver, SLA, escalation, closure rule — from policy
-- [ ] Working-day SLA calculator with institution holiday calendar
-- [ ] Re-evaluation trigger when a policy version changes (§3.3)
-- [ ] Golden tests: SYN-01…07 expected personas and index floors (Appendix D), CS-44 and EE-12 (§20.3–20.4)
+- [x] Working-day SLA calculator with institution holiday calendar
+- [x] Re-evaluation trigger when a policy version changes (§3.3)
+- [x] Golden tests: SYN-01…07 expected personas and index floors (Appendix D), CS-44 and EE-12 (§20.3–20.4)
 
 **Exit gate:** all Appendix D seed records produce their expected persona and index.
 
@@ -175,9 +175,9 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Templated rules-only fallback, `fallback = true`, notice text (§9.4)
 - [x] One retry with parser error on steps 1–2, then fallback
 - [x] Narrative cache keyed by hash(facts, policy version, prompt version) in Redis (§9.5)
-- [ ] Adversarial suite (Appendix C + 12 more = ≥20 cases) as Vitest tests with a recorded-response harness
-- [ ] Contract metrics (§15.2) report script: first-attempt schema pass, evidence coverage, numeric fidelity …
-- [ ] Confirm model provider data-retention/training terms in writing before pilot (owner: engineering lead)
+- [x] Adversarial suite (Appendix C + 12 more = ≥20 cases) as Vitest tests with a recorded-response harness
+- [x] Contract metrics (§15.2) report script: first-attempt schema pass, evidence coverage, numeric fidelity …
+- [ ] Confirm model provider data-retention/training terms in writing before pilot (owner: engineering lead) — **a human task; cannot be done by code. Open until the engineering lead records the confirmation in `docs/decisions.md`.** — **open: needs a human** (see `docs/decisions.md`)
 
 **Exit gate:** adversarial suite zero failures; removing `OPENROUTER_API_KEY` yields valid fallback narratives for all seed records.
 
@@ -188,13 +188,13 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 **Goal:** no student is contacted without a named approver (§1.3, §8).
 
 - [x] Intervention created only as `PENDING_APPROVAL`; decision endpoint approve / edit-and-approve / reject
-- [ ] Consent check at dispatch (recipient + category) — blocks and explains when consent is missing
-- [ ] SLA tracking + escalation jobs (§8.1)
+- [x] Consent check at dispatch (recipient + category) — blocks and explains when consent is missing
+- [x] SLA tracking + escalation jobs (§8.1)
 - [x] Counseling Kanban columns (§8.2); WIP limit 25 with over-limit banner
-- [ ] Kanban: backward moves require a reason; 14-day inactivity amber marker; quest expiry → Follow-up due
+- [x] Kanban: backward moves require a reason; 14-day inactivity amber marker; quest expiry → Follow-up due
 - [x] Keyboard moves + screen-reader announcements (dnd-kit keyboard sensor) (§12.4)
-- [ ] Quest lifecycle (§8.3): Proposed → Accepted → Active → Evidence submitted → Done / Expired; completes only with evidence of the named type
-- [ ] Mentor brief: three facts, data gaps, two suggested questions, pivot options, each fact linked to its source field
+- [x] Quest lifecycle (§8.3): Proposed → Accepted → Active → Evidence submitted → Done / Expired; completes only with evidence of the named type
+- [x] Mentor brief: three facts, data gaps, two suggested questions, pivot options, each fact linked to its source field
 
 **Exit gate:** e2e "mentor approval" journey passes; dispatch without consent is impossible (authorization test).
 
@@ -208,11 +208,11 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Passport: track score vs readiness, gap index, trend, breakdown, data gaps → quests
 - [x] What-if simulator calling the rules engine, writes nothing
 - [x] Consent center: toggles per category × recipient, default mentor-only
-- [ ] Onboarding wired end-to-end: notice ack, consent choices, baseline check + correction request, ambition (dates validated), evidence, first evaluation
+- [x] Onboarding wired end-to-end: notice ack, consent choices, baseline check + correction request, ambition (dates validated), evidence, first evaluation
 - [x] Evidence submission with live status chips
-- [ ] Rights requests (§13.7): access export, correction routing, erasure against retention schedule
-- [ ] Wellbeing nudges (§14.2) with campus counseling + emergency contacts in the passport footer
-- [ ] Leaderboards opt-in (off by default), tabs per track, verified-link chips
+- [x] Rights requests (§13.7): access export, correction routing, erasure against retention schedule
+- [x] Wellbeing nudges (§14.2) with campus counseling + emergency contacts in the passport footer
+- [x] Leaderboards opt-in (off by default), tabs per track, verified-link chips
 
 **Exit gate:** e2e journeys "onboarding", "passport and quest", "consent change" pass on Chromium and WebKit.
 
@@ -223,10 +223,10 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Command Center shell: donut by track, track pill bar, AEG matrix cards (aggregates only)
 - [x] Approval queue screen
 - [x] Student deep-dive behind reason-code prompt (§13.2) with radar chart; every view logged
-- [ ] Class advisor attendance views; placement readiness list (consented fields only); E-Cell traction view
-- [ ] Audit report: printable, policy version + draft warning, aggregates + sampled records (§12.3)
-- [ ] Registrar: policy editor (draft → two approvals → activate), ingestion status
-- [ ] Notifications: weekly digests, WhatsApp templates (opt-in)
+- [x] Class advisor attendance views; placement readiness list (consented fields only); E-Cell traction view
+- [x] Audit report: printable, policy version + draft warning, aggregates + sampled records (§12.3)
+- [x] Registrar: policy editor (draft → two approvals → activate), ingestion status
+- [x] Notifications: weekly digests, WhatsApp templates (opt-in)
 
 **Exit gate:** e2e "audit export" journey passes; Command Center never shows an individual record (test).
 
@@ -235,18 +235,18 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 ## Phase 9 — Security, privacy & DPDP compliance
 
 - [x] Access matrix (§13.1) encoded as data with unit tests
-- [ ] Authorization tests: every `/api/v1` endpoint × every role (§15.1 "zero failures")
-- [ ] Audit events on every read of personal data, policy change, approval, export (§13.6); DB trigger enforces append-only. Auth events done
+- [x] Authorization tests: every `/api/v1` endpoint × every role (§15.1 "zero failures")
+- [x] Audit events on every read of personal data, policy change, approval, export (§13.6); DB trigger enforces append-only. Auth events done
 - [x] Session policy: Redis-stored sessions, server-enforced idle timeout, absolute lifetime per role, trusted devices for students only, timeout warning UI (§13.2)
 - [x] Sign-in hardening: per-IP rate limit, per-account lockout, no credentials in client code, demo login off in production, origin check, security headers
 - [x] Account security page: sessions, remote sign-out, password change
-- [ ] Nonce-based CSP (drop `'unsafe-inline'` for scripts)
-- [ ] Pseudonymous IDs in analytics and LLM requests; roll numbers in a restricted table (§4.1, §9.4)
-- [ ] Log scrubber for personal fields (§13.3)
-- [ ] Retention jobs per §13.5
-- [ ] Under-18 parental consent check (§4.3, §13.4)
-- [ ] DPDP mapping (§13.4) reviewed by compliance; grievance officer contact on every personal-data screen
-- [ ] Dependency scanning, static analysis, OWASP ZAP baseline
+- [ ] Nonce-based CSP (drop `'unsafe-inline'` for scripts) — **open, blocked:** incompatible with Cache Components (cached static shells cannot carry a per-request nonce); decision for the user, see `next.config.ts` and `docs/decisions.md`
+- [x] Pseudonymous IDs in analytics and LLM requests; roll numbers in a restricted table (§4.1, §9.4)
+- [x] Log scrubber for personal fields (§13.3)
+- [x] Retention jobs per §13.5
+- [x] Under-18 parental consent check (§4.3, §13.4)
+- [ ] DPDP mapping (§13.4) reviewed by compliance; grievance officer contact on every personal-data screen — **open: mapping written in `docs/dpdp-mapping.md`; grievance officer is in the footer; compliance review is a human task**
+- [x] Dependency scanning, static analysis, OWASP ZAP baseline — configured in `.github/workflows/security.yml` and `npm run audit:deps`; the workflows have not run on GitHub yet
 
 **Exit gate:** authorization suite zero failures; ZAP baseline no high findings.
 
@@ -254,12 +254,12 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 
 ## Phase 10 — Fairness, wellbeing & evaluation
 
-- [ ] Fairness protocol (§14.1): flag-rate ratio report by group (≥20 per group), 0.8–1.25 band
-- [ ] Language standards linter for student-facing strings (§14.3) as a Vitest test
-- [ ] Golden evaluation set: 60 synthetic records with expected personas, bands and reference narratives (§15.3)
-- [ ] LLM acceptance thresholds (§15.2) report
-- [ ] Accessibility: axe-core on every screen via Playwright; manual screen-reader pass on core journeys
-- [ ] Load test (k6): nightly batch of 2,000 students in < 2 h at concurrency 8; p95 < 1 s cached views (§10.3)
+- [x] Fairness protocol (§14.1): flag-rate ratio report by group (≥20 per group), 0.8–1.25 band
+- [x] Language standards linter for student-facing strings (§14.3) as a Vitest test
+- [x] Golden evaluation set: 60 synthetic records with expected personas, bands and reference narratives (§15.3)
+- [x] LLM acceptance thresholds (§15.2) report
+- [ ] Accessibility: axe-core on every screen via Playwright; manual screen-reader pass on core journeys — **axe-core done** (`e2e/accessibility.spec.ts`, 19 screens, 0 violations); **manual screen-reader pass still open (human)**
+- [ ] Load test (k6): nightly batch of 2,000 students in < 2 h at concurrency 8; p95 < 1 s cached views (§10.3) — **partly done:** `npm run bench:nightly` passes (2,000 students in 0.2 s of compute); `scripts/load/cached-views.js` is written but **has not been run** (k6 not installed), so the p95 < 1 s figure is unmeasured
 
 **Exit gate:** every row of §15.1's "Gate before pilot" column met.
 
@@ -267,11 +267,11 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 
 ## Phase 11 — Demo hardening & rollout
 
-- [ ] Five-journey smoke test (onboarding, passport+quest, mentor approval, consent change, audit export)
-- [ ] Shadow-mode flag: outputs visible only to the project team (§16.2)
-- [ ] Tag a working state every two hours during the hackathon (§19)
-- [ ] Demo script, backup recording, slides
-- [ ] Decisions log for §21 open items (owner, decision, date)
+- [x] Five-journey smoke test (onboarding, passport+quest, mentor approval, consent change, audit export)
+- [x] Shadow-mode flag: outputs visible only to the project team (§16.2)
+- [ ] Tag a working state every two hours during the hackathon (§19) — **process task; `scripts/checkpoint.sh` is ready**
+- [ ] Demo script, backup recording, slides — **script and slide outline written (`docs/demo-script.md`); recording and slides are human tasks**
+- [x] Decisions log for §21 open items (owner, decision, date)
 
 **Exit gate:** judged demo with a backup recording (§16.1 Phase 0 gate).
 

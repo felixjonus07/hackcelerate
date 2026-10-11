@@ -3,10 +3,12 @@
  * Must not import from db, cache, llm, queue or next/*.
  */
 export * from "./aeg";
+export * from "./calendar";
 export * from "./evaluate";
 export * from "./integrity";
 export * from "./normalize";
 export * from "./routing";
+export { checkGate, gateReason } from "./rubrics";
 export * from "./score";
 export * from "./types";
 export * from "./version";

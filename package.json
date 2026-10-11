@@ -20,7 +20,12 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
-    "db:reset": "drizzle-kit migrate && npm run db:seed"
+    "db:reset": "drizzle-kit migrate && npm run db:seed",
+    "erp:sample": "tsx --env-file=.env scripts/erp-sample.ts",
+    "erp:import": "tsx --env-file=.env scripts/erp-import.ts",
+    "llm:report": "tsx --env-file=.env scripts/llm-report.ts",
+    "bench:nightly": "tsx --env-file=.env scripts/bench-nightly.ts",
+    "audit:deps": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -41,6 +46,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@biomejs/biome": "2.4.2",
     "@playwright/cli": "^0.1.22",
     "@playwright/test": "^1.64.0",

@@ -43,6 +43,29 @@ const schema = z.object({
   GITHUB_TOKEN: z.string().optional().default(""),
   CROSSREF_MAILTO: z.string().optional().default(""),
   POLICY_FILE: z.string().default("policy/2026.10-v1.json"),
+  // Object storage (§13.3): an S3-compatible private bucket. Leave blank in development to use local files.
+  S3_ENDPOINT: z.string().optional().default(""),
+  S3_REGION: z.string().default("ap-south-1"),
+  S3_BUCKET: z.string().optional().default(""),
+  S3_ACCESS_KEY_ID: z.string().optional().default(""),
+  S3_SECRET_ACCESS_KEY: z.string().optional().default(""),
+  S3_FORCE_PATH_STYLE: bool,
+  /**
+   * Shadow mode (§16.2): the system scores everyone but shows its outputs only to the project team, nothing is
+   * dispatched, and mentors keep working as usual so their decisions can be compared with the system's.
+   */
+  SHADOW_MODE: bool,
+  /** Comma-separated emails of the project team, who may see outputs in shadow mode. */
+  PROJECT_TEAM_EMAILS: z.string().optional().default(""),
+  // Notifications (§10.1). Blank = email goes to .local-data/outbox and WhatsApp is off.
+  NOTIFY_EMAIL_WEBHOOK_URL: z.string().optional().default(""),
+  WHATSAPP_PHONE_ID: z.string().optional().default(""),
+  WHATSAPP_TOKEN: z.string().optional().default(""),
+  /** GitHub OAuth app that proves repository ownership (§6.2). Both blank = linking is off. */
+  GITHUB_CLIENT_ID: z.string().optional().default(""),
+  GITHUB_CLIENT_SECRET: z.string().optional().default(""),
+  /** The registrar's nightly ERP export (CSV). Empty = no import is configured (§6.2). */
+  ERP_EXPORT_FILE: z.string().optional().default(""),
 });
 
 const DEV_SECRET = "dev-only-secret-change-me-0000000000000000";
@@ -56,4 +79,6 @@ export const demoLoginEnabled =
   env.DEMO_LOGIN_ENABLED && (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
 export const isProduction = env.NODE_ENV === "production";
 export const oidcEnabled = Boolean(env.OIDC_DISCOVERY_URL && env.OIDC_CLIENT_ID);
+export const s3Enabled = Boolean(env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY);
+export const githubOAuthEnabled = Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET);
 export const llmEnabled = Boolean(env.OPENROUTER_API_KEY);

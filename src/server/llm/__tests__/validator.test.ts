@@ -3,7 +3,7 @@
  * each case is a recorded/handwritten model output fed through the pipeline.
  */
 import { describe, expect, it } from "vitest";
-import { loadPolicyFile } from "../../policy/load";
+import { loadPolicyFile } from "../../policy/file";
 import { evaluate } from "../../rules";
 import { ME_27 } from "../../rules/fixtures";
 import { templatedNarrative } from "../fallback";

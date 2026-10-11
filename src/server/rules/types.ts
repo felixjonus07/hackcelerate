@@ -19,6 +19,23 @@ export interface EvidenceItem {
   status: VerificationStatus;
   /** Source kind, used for confidence and integrity checks. */
   source?: string;
+  /**
+   * What the artifact is: repository | project | lab_record | paper | interview_log | sop_review |
+   * fitness_record | camp_record | medal | … Rubrics that need structured values read `details`.
+   */
+  kind?: string;
+  /** Structured values recorded with the artifact (camp days, Cooper distance, deployment uptime…). */
+  details?: Record<string, unknown>;
+}
+
+/** A self-set milestone with its due and completion dates (§5.3.2, §5.3.3). */
+export interface Milestone {
+  id: string;
+  scope: "application" | "venture";
+  title: string;
+  /** ISO date. */
+  dueOn: string;
+  completedOn: string | null;
 }
 
 export interface MockAttempt {
@@ -28,9 +45,16 @@ export interface MockAttempt {
   date: string;
   items: number;
   percentile: number;
+  /** Raw score and the test's maximum, for tests reported as accuracy (weekly tests). */
+  score?: number;
+  maxScore?: number;
   avgSecondsPerItem: number;
   targetSecondsPerItem?: number;
   itemKind?: "mcq" | "numerical";
+  /** Difficulty band of a timed set, for the speed score. */
+  difficulty?: string;
+  /** Where the result came from (campus platform, a named external test body…); labelled in the passport. */
+  source?: string;
   status: VerificationStatus;
 }
 
@@ -58,9 +82,23 @@ export interface Aspiration {
   readiness?: number;
 }
 
+/** What the §4.3 data-quality checks found while the facts were assembled. */
+export interface DataQualityNotes {
+  /** Why the CGPA was excluded from scoring (it is also null in `cgpa`). */
+  cgpa?: string;
+  /** Weeks in the look-back window with no valid attendance record. */
+  attendanceWeeksMissing?: number;
+  /** The confidence cap those missing weeks imply (§4.3). */
+  attendanceCap?: "NONE" | "MEDIUM" | "LOW";
+  /** Attempt ids stored but excluded from percentile scoring. */
+  excludedMocks?: string[];
+}
+
 /** A validated snapshot of everything the rubric needs for one student. */
 export interface StudentFacts {
   studentId: string;
+  /** The ISO date the snapshot describes. Rubrics that depend on dates read this, never the clock. */
+  asOf?: string;
   department: string;
   year: number;
   cgpa: number | null;
@@ -77,10 +115,11 @@ export interface StudentFacts {
   internalAptitudePercentile?: number | null;
   attendanceWeekly?: WeeklySignal[];
   mockPercentileWeekly?: WeeklySignal[];
-  /** Days (in the streak window) with a valid credit. */
-  streakValidDays?: number;
-  /** Gap days in the last 14 days of streak activity. */
-  streakGapDays14?: number;
+  /** Credits held, from the ERP; the Sports, Defense and NCC gate reads it (§5.3.6). */
+  creditsHeld?: number | null;
+  milestones?: Milestone[];
+  /** Dates (ISO) with a logged current-affairs session, for the last 60 days (§5.3.4). */
+  currentAffairsDates?: string[];
   /** Count of platform activity events in the last 60 days. */
   activityLast60d?: number;
   mocksLast60d?: number;
@@ -91,10 +130,9 @@ export interface StudentFacts {
   artifactScore?: number | null;
   cohortArtifactP75?: number | null;
   verifiedProjects?: number;
-  /** Track-specific raw measures not covered above (component key → 0–100 score). */
-  precomputed?: Record<string, number | null>;
   /** Sources that failed within the confidence window (§5.6). */
   recentSourceFailures?: number;
+  dataQuality?: DataQualityNotes;
 }
 
 export interface ComponentResult {
@@ -107,6 +145,10 @@ export interface ComponentResult {
   contribution: number;
   evidenceRefs: string[];
   dataGaps: string[];
+  /** Extra measures shown beside the score (for example the speed score of entrance practice). */
+  subMeasures?: { label: string; value: string }[];
+  /** Department standard items (or required items) with no counted evidence: what a quest can fill. */
+  missingItems?: string[];
   calculation: string;
 }
 
@@ -149,6 +191,11 @@ export interface Evaluation {
   policyVersion: string;
   engineVersion: string;
   trackScore: TrackScore;
+  /**
+   * False when the track's gate is not met: the passport then reads "Not enough evidence yet"
+   * and shows no score (§5.3). The index is still computed so routing keeps working.
+   */
+  scoreShown: boolean;
   readiness: number;
   gapRatio: number;
   gapIndex: AegLevel;

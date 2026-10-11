@@ -1,5 +1,5 @@
 /** Evidence and execution signals (§4.1, §6). */
-import { date, index, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { date, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { verificationStatusEnum } from "./enums";
 import { students } from "./people";
@@ -25,10 +25,28 @@ export const artifacts = pgTable(
     weight: numeric("weight", { precision: 5, scale: 2, mode: "number" }).notNull().default(1),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     contentHash: text("content_hash"),
+    /**
+     * Normalised identity of what is claimed (repository, DOI, certificate id), so the same claim
+     * made by two students is found (§6.3 duplicate claim).
+     */
+    claimKey: text("claim_key"),
+    /** Hash of the normalised description, for reused-text detection (§6.3). */
+    textHash: text("text_hash"),
+    /** When the next automatic re-check is due (§6.2); null for items that are not re-checked. */
+    nextCheckAt: timestamp("next_check_at", { withTimezone: true }),
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    /** When a named reviewer attested the item; attestations lapse after a review period. */
+    attestedAt: timestamp("attested_at", { withTimezone: true }),
     details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("artifacts_student_idx").on(t.studentId), index("artifacts_hash_idx").on(t.contentHash)],
+  (t) => [
+    index("artifacts_student_idx").on(t.studentId),
+    index("artifacts_hash_idx").on(t.contentHash),
+    index("artifacts_claim_idx").on(t.claimKey),
+    index("artifacts_text_hash_idx").on(t.textHash),
+    index("artifacts_next_check_idx").on(t.nextCheckAt),
+  ],
 );
 
 /** Append-only history of status transitions (§6.1). */
@@ -57,7 +75,11 @@ export const attendanceWeeks = pgTable(
     classesHeld: integer("classes_held").notNull(),
     classesAttended: integer("classes_attended").notNull(),
   },
-  (t) => [index("attendance_student_week_idx").on(t.studentId, t.weekStart)],
+  (t) => [
+    index("attendance_student_week_idx").on(t.studentId, t.weekStart),
+    // One row per student, course and week, so a re-import replaces instead of duplicating (§6.2).
+    uniqueIndex("attendance_unique_week").on(t.studentId, t.course, t.weekStart),
+  ],
 );
 
 export const mockAttempts = pgTable(
@@ -74,6 +96,8 @@ export const mockAttempts = pgTable(
       scale: 2,
       mode: "number",
     }).notNull(),
+    /** The test's score range (§4.3): a score outside 0–maxScore is stored but flagged. */
+    maxScore: numeric("max_score", { precision: 6, scale: 2, mode: "number" }).notNull().default(100),
     percentile: numeric("percentile", {
       precision: 5,
       scale: 2,
@@ -90,6 +114,16 @@ export const mockAttempts = pgTable(
       mode: "number",
     }),
     itemKind: text("item_kind"),
+    /** Difficulty band of a timed set, for the speed score (§5.3.4). */
+    difficulty: text("difficulty"),
+    /** External reports are sampled each term and checked against the test body (§6.2). */
+    sampledAt: timestamp("sampled_at", { withTimezone: true }),
+    /** MATCH | MISMATCH, set by the reviewer who checked the sampled report. */
+    sampleOutcome: text("sample_outcome"),
+    /** Why the attempt is excluded from percentile scoring (§4.3), if it is. */
+    qualityFlag: text("quality_flag"),
+    /** Raw answers; kept 12 months, scores stay with the record (§13.5). */
+    rawAnswers: jsonb("raw_answers").$type<unknown>(),
     source: text("source").notNull(),
     status: verificationStatusEnum("status").notNull(),
     takenAt: timestamp("taken_at", { withTimezone: true }).notNull(),
@@ -126,6 +160,8 @@ export const internshipRecords = pgTable("internship_records", {
 });
 
 export const integrityFlags = pgTable("integrity_flags", {
+  /** One flag per (check, subject, student): re-running a check never raises the same flag twice. */
+  dedupeKey: text("dedupe_key").unique(),
   id: uuid("id").primaryKey().defaultRandom(),
   studentId: uuid("student_id")
     .notNull()
@@ -138,3 +174,41 @@ export const integrityFlags = pgTable("integrity_flags", {
   resolution: text("resolution"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Self-set milestones with due and completion dates (§5.3.2 application timeline, §5.3.3 venture milestones). */
+export const milestones = pgTable(
+  "milestones",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    /** application | venture */
+    scope: text("scope").notNull(),
+    title: text("title").notNull(),
+    dueOn: date("due_on").notNull(),
+    completedOn: date("completed_on"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("milestones_student_idx").on(t.studentId, t.scope)],
+);
+
+/**
+ * Platform activity with timestamps: study sessions, practice, logins. Feeds the 60-day activity
+ * count (§7.3), the current-affairs days (§5.3.4) and the wellbeing patterns (§14.2).
+ * Holds no content, only that something happened and how many items it covered.
+ */
+export const activityEvents = pgTable(
+  "activity_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, { onDelete: "cascade" }),
+    at: timestamp("at", { withTimezone: true }).notNull(),
+    /** login | current_affairs | practice | mock */
+    kind: text("kind").notNull(),
+    items: integer("items").notNull().default(0),
+  },
+  (t) => [index("activity_student_at_idx").on(t.studentId, t.at)],
+);

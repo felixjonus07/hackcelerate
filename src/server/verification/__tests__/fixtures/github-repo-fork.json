@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "body": {
+    "full_name": "github/Spoon-Knife",
+    "name": "Spoon-Knife",
+    "private": false,
+    "fork": true,
+    "created_at": "2016-02-05T14:47:48Z",
+    "pushed_at": "2024-04-09T20:13:07Z",
+    "default_branch": "master",
+    "html_url": "https://github.com/github/Spoon-Knife",
+    "owner": {
+      "login": "github",
+      "type": "Organization"
+    }
+  }
+}

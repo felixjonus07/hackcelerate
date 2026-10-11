@@ -1,5 +1,5 @@
 /** Consent center reads/writes (§12.1 card 2, §13.4). History is append-only. */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { CONSENT_RECIPIENTS, CONSENTABLE } from "../consent/matrix";
 import { db } from "../db";
 import { consentRecords } from "../db/schema";
@@ -59,4 +59,32 @@ export async function setConsent(
     granted,
     changedBy,
   });
+  // Sharing something new may release an approved proposal that was waiting on it (§8.1).
+  if (granted) {
+    const { retryBlockedDispatches } = await import("./dispatch");
+    await retryBlockedDispatches(studentId);
+  }
+}
+
+/** Of the given students, those whose latest consent grants `role` access to `category` (§13.1 "consented"). */
+export async function consentedStudentIds(
+  studentIds: string[],
+  category: ConsentCategory,
+  role: Role,
+): Promise<Set<string>> {
+  if (studentIds.length === 0) return new Set();
+  const rows = await db
+    .select({ studentId: consentRecords.studentId, granted: consentRecords.granted, at: consentRecords.changedAt })
+    .from(consentRecords)
+    .where(
+      and(
+        inArray(consentRecords.studentId, studentIds),
+        eq(consentRecords.category, category),
+        eq(consentRecords.recipientRole, role),
+      ),
+    )
+    .orderBy(desc(consentRecords.changedAt));
+  const latest = new Map<string, boolean>();
+  for (const r of rows) if (!latest.has(r.studentId)) latest.set(r.studentId, r.granted);
+  return new Set([...latest].filter(([, granted]) => granted).map(([id]) => id));
 }

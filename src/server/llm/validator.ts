@@ -5,6 +5,7 @@
  */
 import type { FactsLayer } from "./prompt";
 import { type Narrative, narrativeSchema } from "./schema";
+import { canon, leetFold, nonLatinLetters } from "./text";
 
 export const FORBIDDEN_TERMS = [
   // protected attributes (§9.3 step 5, Appendix A rule 4)
@@ -18,7 +19,10 @@ export const FORBIDDEN_TERMS = [
   "sexual orientation",
   "family income",
   "home region",
-  // diagnostic terms
+  "first-generation",
+  "first generation",
+  "medium of instruction",
+  // diagnostic and health terms
   "depressed",
   "depression",
   "anxiety",
@@ -27,6 +31,11 @@ export const FORBIDDEN_TERMS = [
   "disorder",
   "adhd",
   "bipolar",
+  "health",
+  "illness",
+  "medical",
+  "therapy",
+  "burnout",
   // labels (§14.3)
   "drifting",
   "failure",
@@ -46,7 +55,33 @@ export const FORBIDDEN_TERMS = [
   "detention threat builder",
 ];
 
-export type CheckName = "parse" | "schema" | "evidence_refs" | "numeric_fidelity" | "forbidden_content" | "tone_length";
+/** Whole words that name a protected group; matched as words so "management" stays fine. */
+const PROTECTED_WORDS =
+  /\b(woman|women|girl|boy|female|male|hindu|muslim|christian|sikh|buddhist|jain|dalit|obc|rural|tribal|poor|wealthy)\b/;
+
+/** Personal data a narrative must never echo: contacts and roll numbers (§9.4). */
+const PII_PATTERNS = [/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i, /\+?\d[\d\s-]{8,}\d/, /\b[a-z]{2,5}\d{4,8}\b/i];
+
+/** Distinct phrases of the system prompt: a narrative that repeats them is leaking it (Appendix C). */
+const PROMPT_CANARIES = [
+  "narrative writer for aspiredge",
+  "follow these rules without exception",
+  "untrusted student input",
+  "return only json that matches",
+];
+
+/** Wording that shows a narrative acting on an instruction instead of describing evidence. */
+const OBEYING =
+  /\b(dispatch(ed|ing)?|escalat\w+|forward(ed|ing)? (this|it|the)|as (you )?(instructed|requested|asked)|i (have )?(set|changed|updated|raised|lowered)|ignore (all|the|previous)|new instructions?|my own score|system prompt)\b/;
+
+export type CheckName =
+  | "parse"
+  | "schema"
+  | "evidence_refs"
+  | "status_claim"
+  | "numeric_fidelity"
+  | "forbidden_content"
+  | "tone_length";
 
 export interface ValidationResult {
   ok: boolean;
@@ -78,6 +113,51 @@ function allowedNumbers(facts: FactsLayer): Set<string> {
   for (let i = 1; i <= 3; i++) add(i); // step numbers
   return out;
 }
+
+/** True if the text holds forbidden content (§9.3 step 5), whatever tricks hide it. */
+export function containsForbidden(text: string): boolean {
+  const plain = canon(text);
+  const leet = leetFold(text);
+  return (
+    FORBIDDEN_TERMS.some((t) => plain.includes(t) || leet.includes(t)) ||
+    PROTECTED_WORDS.test(plain) ||
+    PII_PATTERNS.some((re) => re.test(text) || re.test(plain)) ||
+    PROMPT_CANARIES.some((c) => plain.includes(c)) ||
+    OBEYING.test(plain) ||
+    nonLatinLetters(text) > 0
+  );
+}
+
+/** Steps 3–5 for one sentence against one facts layer; null means it passes. */
+export function makeSentenceChecker(facts: FactsLayer): (sentence: string) => CheckName | null {
+  const ids = new Set(facts.facts.map((f) => f.id));
+  const numbers = allowedNumbers(facts);
+  const statusOf = new Map(facts.facts.filter((f) => f.status).map((f) => [f.id, f.status as string]));
+  return (s) => {
+    // 3. Evidence references: at least one, and every one must exist.
+    const refs = [...s.matchAll(REF)].map((m) => m[1]);
+    if (!refs.length || refs.some((r) => !ids.has(r))) return "evidence_refs";
+    // A claim of verification must match the status of what it cites: only the link check decides that.
+    const plainS = canon(s.replace(REF, ""));
+    const claimsVerified =
+      /\b(verified|verification)\b/.test(plainS) && !/\b(not|un|yet to be|awaiting)\W*(been )?verif/.test(plainS);
+    const claimsAttested = /\battested\b/.test(plainS) && !/\bnot\W*(yet )?attested\b/.test(plainS);
+    for (const r of refs) {
+      const st = statusOf.get(r);
+      if (!st) continue;
+      if (claimsVerified && st !== "VERIFIED") return "status_claim";
+      if (claimsAttested && st !== "ATTESTED") return "status_claim";
+    }
+    // 4. Numeric fidelity: every number must come from the facts.
+    const bare = s.replace(REF, "");
+    for (const m of bare.matchAll(/\d+(?:\.\d+)?/g))
+      if (!numbers.has(m[0]) && !numbers.has(String(Number(m[0])))) return "numeric_fidelity";
+    // 5. Forbidden content.
+    return containsForbidden(bare) ? "forbidden_content" : null;
+  };
+}
+
+export const splitIntoSentences = splitSentences;
 
 export function validateNarrative(raw: string, facts: FactsLayer): ValidationResult {
   const removed: ValidationResult["removed"] = [];
@@ -111,21 +191,8 @@ export function validateNarrative(raw: string, facts: FactsLayer): ValidationRes
 
   const n = structuredClone(parsed.data);
   const ids = new Set(facts.facts.map((f) => f.id));
-  const numbers = allowedNumbers(facts);
-
-  const checkSentence = (s: string): CheckName | null => {
-    // 3. Evidence references: at least one, and every one must exist.
-    const refs = [...s.matchAll(REF)].map((m) => m[1]);
-    if (!refs.length || refs.some((r) => !ids.has(r))) return "evidence_refs";
-    // 4. Numeric fidelity: every number must come from the facts.
-    const bare = s.replace(REF, "");
-    for (const m of bare.matchAll(/\d+(?:\.\d+)?/g))
-      if (!numbers.has(m[0]) && !numbers.has(String(Number(m[0])))) return "numeric_fidelity";
-    // 5. Forbidden content.
-    const lower = bare.toLowerCase();
-    if (FORBIDDEN_TERMS.some((t) => lower.includes(t))) return "forbidden_content";
-    return null;
-  };
+  const forbidden = containsForbidden;
+  const checkSentence = makeSentenceChecker(facts);
 
   const cleanField = (field: string, text: string) =>
     splitSentences(text)
@@ -141,15 +208,15 @@ export function validateNarrative(raw: string, facts: FactsLayer): ValidationRes
   n.career_pivot_advisory.reasoning = cleanField("career_pivot_advisory.reasoning", n.career_pivot_advisory.reasoning);
   n.prescriptive_action_plan = n.prescriptive_action_plan.filter((step) => {
     const bad = step.evidence_refs.some((r) => !ids.has(r));
-    const text = `${step.title}. ${step.action}`.toLowerCase();
-    const forbidden = FORBIDDEN_TERMS.some((t) => text.includes(t));
-    if (bad || forbidden)
+    const text = `${step.title}. ${step.action}`;
+    const badWords = forbidden(text);
+    if (bad || badWords)
       removed.push({
         field: `action_plan.${step.step_number}`,
         sentence: step.title,
         check: bad ? "evidence_refs" : "forbidden_content",
       });
-    return !bad && !forbidden;
+    return !bad && !badWords;
   });
 
   // 6. Tone and length — warnings only.

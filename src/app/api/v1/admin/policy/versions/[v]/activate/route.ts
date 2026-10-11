@@ -1,47 +1,20 @@
-import { eq } from "drizzle-orm";
+import { rolesOf } from "@/server/api/access";
 import { apiError, handle, json } from "@/server/api/handler";
-import { audit } from "@/server/audit/log";
 import { requireApiUser } from "@/server/auth/session";
-import { db } from "@/server/db";
-import { policyVersions } from "@/server/db/schema";
+import { approveVersion, PolicyError } from "@/server/services/policy-admin";
 
 /**
- * POST /api/v1/admin/policy/versions/{v}/activate — records an approval; the
- * version activates on the second distinct approver (§3.3 two-person rule).
+ * POST /api/v1/admin/policy/versions/{v}/activate — records the caller's approval; the version
+ * activates once it has the approvals its change needs: two for persona changes (§3.3), else one.
  */
-export const POST = handle(async (_req: Request, ctx: { params: Promise<{ v: string }> }) => {
-  const user = await requireApiUser(["registrar", "dean"]);
+export const POST = handle(async (req: Request, ctx: { params: Promise<{ v: string }> }) => {
+  const user = await requireApiUser(rolesOf("policy-activate"));
   const { v } = await ctx.params;
-  const [row] = await db.select().from(policyVersions).where(eq(policyVersions.version, v)).limit(1);
-  if (!row) return apiError(404, "not_found", "Policy version not found");
-  if (row.status !== "DRAFT") return apiError(409, "not_draft", `Version is ${row.status}`);
-  if (row.approvals.some((a) => a.userId === user.id))
-    return apiError(409, "already_approved", "A second, different approver is required");
-  const approvals = [...row.approvals, { userId: user.id, role: user.role, at: new Date().toISOString() }];
-  const activate = approvals.length >= 2;
-  await db.transaction(async (tx) => {
-    if (activate) await tx.update(policyVersions).set({ status: "RETIRED" }).where(eq(policyVersions.status, "ACTIVE"));
-    await tx
-      .update(policyVersions)
-      .set({
-        approvals,
-        ...(activate ? { status: "ACTIVE" as const, activatedAt: new Date() } : {}),
-      })
-      .where(eq(policyVersions.version, v));
-  });
-  await audit({
-    actorUserId: user.id,
-    actorRole: user.role,
-    action: activate ? "policy.activate" : "policy.approve",
-    entityType: "policy",
-    entityId: v,
-    purpose: "policy_change",
-    result: "allowed",
-  });
-  return json({
-    ok: true,
-    version: v,
-    approvals: approvals.length,
-    status: activate ? "ACTIVE" : "DRAFT",
-  });
+  try {
+    const r = await approveVersion(user, v, req.headers.get("x-forwarded-for"));
+    return json({ ok: true, version: v, ...r });
+  } catch (e) {
+    if (e instanceof PolicyError) return apiError(e.code === "not_found" ? 404 : 409, e.code, e.message);
+    throw e;
+  }
 });

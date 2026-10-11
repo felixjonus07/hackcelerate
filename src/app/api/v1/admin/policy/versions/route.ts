@@ -1,29 +1,22 @@
-import { handle, json } from "@/server/api/handler";
-import { audit } from "@/server/audit/log";
+import { rolesOf } from "@/server/api/access";
+import { apiError, handle, json } from "@/server/api/handler";
 import { requireApiUser } from "@/server/auth/session";
-import { db } from "@/server/db";
-import { policyVersions } from "@/server/db/schema";
-import { policySchema } from "@/server/policy/schema";
+import { createDraft, listPolicyVersions, PolicyError } from "@/server/services/policy-admin";
+
+/** GET /api/v1/admin/policy/versions — read-only list (registrar edits; dean, HOD and auditor view, §13.1). */
+export const GET = handle(async () => {
+  await requireApiUser(rolesOf("policy-list"));
+  return json({ versions: await listPolicyVersions() });
+});
 
 /** POST /api/v1/admin/policy/versions — create a DRAFT policy version (registrar). */
 export const POST = handle(async (req: Request) => {
-  const user = await requireApiUser(["registrar"]);
-  const doc = policySchema.parse(await req.json());
-  await db.insert(policyVersions).values({
-    version: doc.policy_version,
-    status: "DRAFT",
-    effectiveFrom: new Date(doc.effective_from),
-    document: { ...doc, status: "DRAFT" },
-    createdBy: user.id,
-  });
-  await audit({
-    actorUserId: user.id,
-    actorRole: user.role,
-    action: "policy.create",
-    entityType: "policy",
-    entityId: doc.policy_version,
-    purpose: "policy_change",
-    result: "allowed",
-  });
-  return json({ ok: true, version: doc.policy_version, status: "DRAFT" }, { status: 201 });
+  const user = await requireApiUser(rolesOf("policy-create"));
+  try {
+    const draft = await createDraft(user, await req.json(), req.headers.get("x-forwarded-for"));
+    return json({ ok: true, ...draft }, { status: 201 });
+  } catch (e) {
+    if (e instanceof PolicyError) return apiError(409, e.code, e.message);
+    throw e;
+  }
 });

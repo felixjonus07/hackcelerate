@@ -5,38 +5,76 @@
  */
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { audit } from "@/server/audit/log";
 import { requireStudent } from "@/server/auth/session";
 import { CONSENT_RECIPIENTS, CONSENTABLE } from "@/server/consent/matrix";
 import { db } from "@/server/db";
-import { artifacts, aspirations, leaderboardOptIns, quests, rightsRequests, students } from "@/server/db/schema";
+import { aspirations, leaderboardOptIns, quests, students } from "@/server/db/schema";
 import type { ConsentCategory, Role } from "@/server/db/schema/enums";
 import { TRACK_IDS } from "@/server/policy/schema";
 import { setConsent } from "@/server/services/consent";
 import { runEvaluation } from "@/server/services/evaluations";
+import { EvidenceError, submitEvidence } from "@/server/services/evidence";
+import { acknowledgeNotice, completeOnboarding, moveToCard, OnboardingError } from "@/server/services/onboarding";
+import * as quests_ from "@/server/services/quests";
+import { QuestError } from "@/server/services/quests";
+import { RightsError, raiseRequest } from "@/server/services/rights";
+import { dismissNudge } from "@/server/services/wellbeing";
 
-export async function acceptQuest(questId: string) {
-  const { student } = await requireStudent();
-  await db
-    .update(quests)
-    .set({ status: "ACCEPTED", dueAt: new Date(Date.now() + 14 * 86_400_000) })
-    .where(and(eq(quests.id, questId), eq(quests.studentId, student.id), eq(quests.status, "PROPOSED")));
+type QuestResult = { ok: boolean; message: string };
+
+/** Run a quest change for the signed-in student; a QuestError becomes a message, not a crash. */
+async function questAction(
+  fn: (ctx: Awaited<ReturnType<typeof requireStudent>>) => Promise<unknown>,
+  done: string,
+): Promise<QuestResult> {
+  const ctx = await requireStudent();
+  try {
+    await fn(ctx);
+  } catch (e) {
+    if (e instanceof QuestError) return { ok: false, message: e.message };
+    throw e;
+  }
   revalidatePath("/student", "layout");
+  return { ok: true, message: done };
 }
 
+export async function acceptQuest(questId: string) {
+  return questAction(
+    ({ user, student }) => quests_.acceptQuest(student, user, z.uuid().parse(questId)),
+    "Accepted. The clock starts now.",
+  );
+}
+export async function startQuest(questId: string) {
+  return questAction(
+    ({ user, student }) => quests_.startQuest(student, user, z.uuid().parse(questId)),
+    "Marked as started.",
+  );
+}
 export async function deferQuest(questId: string) {
-  const { student } = await requireStudent();
-  await db
-    .update(quests)
-    .set({ status: "EXPIRED" })
-    .where(and(eq(quests.id, questId), eq(quests.studentId, student.id), eq(quests.status, "PROPOSED")));
-  revalidatePath("/student", "layout");
+  return questAction(
+    ({ user, student }) => quests_.deferQuest(student, user, z.uuid().parse(questId)),
+    "Put off. It will come back later.",
+  );
+}
+export async function editQuestDays(questId: string, days: number) {
+  return questAction(
+    ({ user, student }) => quests_.editQuestDays(student, user, z.uuid().parse(questId), z.number().int().parse(days)),
+    "Updated.",
+  );
+}
+export async function reopenQuest(questId: string) {
+  return questAction(
+    ({ user, student }) => quests_.reopenQuest(student, user, z.uuid().parse(questId)),
+    "Picked up again with a fresh date.",
+  );
 }
 
 const evidenceInput = z.object({
   questId: z.uuid(),
-  sourceUrl: z.url().max(500),
+  sourceUrl: z.string().max(500).optional(),
   description: z.string().max(1000).optional(),
 });
 
@@ -44,45 +82,42 @@ export async function submitQuestEvidence(_: unknown, form: FormData): Promise<{
   const { user, student } = await requireStudent();
   const parsed = evidenceInput.safeParse({
     questId: form.get("questId"),
-    sourceUrl: form.get("sourceUrl"),
+    sourceUrl: form.get("sourceUrl") || undefined,
     description: form.get("description") || undefined,
   });
-  if (!parsed.success) return { ok: false, message: "Add a full link starting with https://" };
+  if (!parsed.success) return { ok: false, message: "Something in the form is missing. Reload and try again." };
   const [q] = await db
     .select()
     .from(quests)
     .where(and(eq(quests.id, parsed.data.questId), eq(quests.studentId, student.id)))
     .limit(1);
   if (!q) return { ok: false, message: "That quest isn't on your list any more." };
-  const [a] = await db
-    .insert(artifacts)
-    .values({
-      studentId: student.id,
-      type: q.requiredEvidenceType,
-      component: q.componentKey ?? "general",
-      standardItem: q.standardItem,
-      label: q.title,
-      description: parsed.data.description ?? null,
-      sourceUrl: parsed.data.sourceUrl,
-      source: "student",
-      status: "SUBMITTED",
-    })
-    .returning();
-  await db.update(quests).set({ status: "EVIDENCE_SUBMITTED", evidenceArtifactId: a.id }).where(eq(quests.id, q.id));
-  await audit({
-    actorUserId: user.id,
-    actorRole: user.role,
-    action: "artifact.submit",
-    entityType: "artifact",
-    entityId: a.id,
-    purpose: "quest_evidence",
-    result: "allowed",
-  });
+  const file = form.get("file");
+  try {
+    await submitEvidence(
+      student,
+      user,
+      {
+        type: q.requiredEvidenceType,
+        label: q.title,
+        component: q.componentKey ?? "general",
+        standardItem: q.standardItem,
+        sourceUrl: parsed.data.sourceUrl,
+        description: parsed.data.description,
+        file:
+          file instanceof File && file.size > 0
+            ? { bytes: new Uint8Array(await file.arrayBuffer()), contentType: file.type }
+            : null,
+        questId: q.id,
+      },
+      (await headers()).get("x-forwarded-for"),
+    );
+  } catch (e) {
+    if (e instanceof EvidenceError) return { ok: false, message: e.message };
+    throw e;
+  }
   revalidatePath("/student", "layout");
-  return {
-    ok: true,
-    message: "Submitted. We'll check it and update its status here.",
-  };
+  return { ok: true, message: "Submitted. We'll check it and update its status here." };
 }
 
 const consentInput = z.object({
@@ -120,24 +155,52 @@ export async function setLeaderboardVisibility(optedIn: boolean) {
   revalidatePath("/student/consent");
 }
 
-export async function requestRight(kind: "access" | "correction" | "erasure", detail?: string) {
+export async function requestRight(
+  kind: "access" | "correction" | "erasure",
+  detail?: string,
+): Promise<{ ok: boolean; message: string; letter?: string | null }> {
   const { user, student } = await requireStudent();
-  await db.insert(rightsRequests).values({
-    studentId: student.id,
-    kind,
-    detail: detail ?? null,
-    dueAt: new Date(Date.now() + 30 * 86_400_000),
-  });
-  await audit({
-    actorUserId: user.id,
-    actorRole: user.role,
-    action: `rights.${kind}`,
-    entityType: "student",
-    entityId: student.pseudonymousId,
-    purpose: "rights_request",
-    result: "allowed",
-  });
-  revalidatePath("/student/consent");
+  try {
+    const r = await raiseRequest(student, user, { kind, detail: detail?.slice(0, 1000) });
+    revalidatePath("/student/consent");
+    return {
+      ok: true,
+      message:
+        kind === "access"
+          ? "Your export is ready. Download it below."
+          : kind === "correction"
+            ? "Sent. The registrar will check it and reply here."
+            : "Received. The letter below says what is erased now and what is kept, and why.",
+      letter: r.letter,
+    };
+  } catch (e) {
+    if (e instanceof RightsError) return { ok: false, message: e.message };
+    throw e;
+  }
+}
+
+/** Onboarding cards 1 and 6 (§12.1): the notice is acknowledged, then the setup is finished. */
+export async function acknowledgeNoticeAction(): Promise<{ ok: boolean; message: string }> {
+  const { user, student } = await requireStudent();
+  await acknowledgeNotice(student, user);
+  return { ok: true, message: "Noted." };
+}
+
+export async function moveToCardAction(card: number): Promise<void> {
+  const { student } = await requireStudent();
+  await moveToCard(student, z.number().int().min(0).max(5).parse(card));
+}
+
+export async function completeOnboardingAction(): Promise<{ ok: boolean; message: string }> {
+  const { user, student } = await requireStudent();
+  try {
+    await completeOnboarding(student, user);
+  } catch (e) {
+    if (e instanceof OnboardingError) return { ok: false, message: e.message };
+    throw e;
+  }
+  revalidatePath("/student", "layout");
+  return { ok: true, message: "All set." };
 }
 
 const aspirationInput = z.object({
@@ -184,4 +247,10 @@ export async function saveAspiration(_: unknown, form: FormData): Promise<{ ok: 
   await runEvaluation(student.id, { actorUserId: user.id });
   revalidatePath("/student", "layout");
   return { ok: true, message: "Saved. Your passport has been re-scored." };
+}
+
+export async function dismissNudgeAction(nudgeId: string) {
+  const { student } = await requireStudent();
+  await dismissNudge(student.id, z.uuid().parse(nudgeId));
+  revalidatePath("/student", "layout");
 }

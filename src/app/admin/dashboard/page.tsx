@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/shell/app-shell";
+import { ShadowHold } from "@/components/shell/shadow-hold";
 import { TrackDonut } from "@/components/staff/track-donut";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -11,11 +12,13 @@ import { TRACK_LABELS, TREND_SHORT } from "@/lib/labels";
 import { COMMAND_CENTER_ROLES } from "@/server/auth/roles";
 import { requireUser } from "@/server/auth/session";
 import { cohortSummary } from "@/server/services/cohort";
+import { mayViewOutputs } from "@/server/shadow";
 
 export const metadata: Metadata = { title: "Command Center" };
 
 async function CommandCenter() {
   const user = await requireUser(COMMAND_CENTER_ROLES);
+  if (!mayViewOutputs(user)) return <ShadowHold />;
   const s = await cohortSummary(user);
   if (!s.total)
     return (
