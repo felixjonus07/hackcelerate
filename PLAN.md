@@ -155,11 +155,11 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Trend engine: least-squares slope over 4 weeks, thresholds, INSUFFICIENT_DATA (§7.5)
 - [x] Pivot advisory (§7.6) — rule-based, never automatic
 - [x] Routing table (§8.1): recipient, approver, SLA, escalation, closure rule — from policy
-- [ ] Working-day SLA calculator with institution holiday calendar
-- [ ] Re-evaluation trigger when a policy version changes (§3.3)
-- [ ] Golden tests: SYN-01…07 expected personas and index floors (Appendix D), CS-44 and EE-12 (§20.3–20.4)
+- [x] Working-day SLA calculator with institution holiday calendar
+- [x] Re-evaluation trigger when a policy version changes (§3.3)
+- [x] Golden tests: SYN-01…07 expected personas and index floors (Appendix D), CS-44 and EE-12 (§20.3–20.4)
 
-**Exit gate:** all Appendix D seed records produce their expected persona and index.
+**Exit gate:** all Appendix D seed records produce their expected persona and index. [MET]
 
 ---
 
@@ -175,11 +175,11 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Templated rules-only fallback, `fallback = true`, notice text (§9.4)
 - [x] One retry with parser error on steps 1–2, then fallback
 - [x] Narrative cache keyed by hash(facts, policy version, prompt version) in Redis (§9.5)
-- [ ] Adversarial suite (Appendix C + 12 more = ≥20 cases) as Vitest tests with a recorded-response harness
-- [ ] Contract metrics (§15.2) report script: first-attempt schema pass, evidence coverage, numeric fidelity …
-- [ ] Confirm model provider data-retention/training terms in writing before pilot (owner: engineering lead)
+- [x] Adversarial suite (Appendix C + 12 more = ≥20 cases) as Vitest tests with a recorded-response harness
+- [x] Contract metrics (§15.2) report script: first-attempt schema pass, evidence coverage, numeric fidelity …
+- [x] Confirm model provider data-retention/training terms in writing before pilot (owner: engineering lead)
 
-**Exit gate:** adversarial suite zero failures; removing `OPENROUTER_API_KEY` yields valid fallback narratives for all seed records.
+**Exit gate:** adversarial suite zero failures; removing `OPENROUTER_API_KEY` yields valid fallback narratives for all seed records. [MET]
 
 ---
 

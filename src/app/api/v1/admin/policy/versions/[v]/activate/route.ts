@@ -3,8 +3,9 @@ import { apiError, handle, json } from "@/server/api/handler";
 import { audit } from "@/server/audit/log";
 import { requireApiUser } from "@/server/auth/session";
 import { db } from "@/server/db";
-import { policyVersions } from "@/server/db/schema";
+import { policyVersions, students } from "@/server/db/schema";
 import { clearPolicyCache } from "@/server/policy/load";
+import { enqueue } from "@/server/queue";
 
 /**
  * POST /api/v1/admin/policy/versions/{v}/activate — records an approval; the
@@ -30,8 +31,18 @@ export const POST = handle(async (_req: Request, ctx: { params: Promise<{ v: str
       })
       .where(eq(policyVersions.version, v));
   });
+  let reEvaluationsQueued = 0;
   if (activate) {
     clearPolicyCache();
+    const rows = await db.select({ id: students.id }).from(students);
+    for (const r of rows) {
+      await enqueue("evaluation", {
+        studentId: r.id,
+        requestedBy: user.id,
+        reason: "policy_change",
+      });
+    }
+    reEvaluationsQueued = rows.length;
   }
   await audit({
     actorUserId: user.id,
@@ -47,5 +58,6 @@ export const POST = handle(async (_req: Request, ctx: { params: Promise<{ v: str
     version: v,
     approvals: approvals.length,
     status: activate ? "ACTIVE" : "DRAFT",
+    reEvaluationsQueued,
   });
 });

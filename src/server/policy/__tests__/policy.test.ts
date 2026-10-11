@@ -39,4 +39,11 @@ describe("§3 Institutional Policy & Governance", () => {
     raw.aeg_bands.critical_from = -0.5; // invalid
     expect(() => parsePolicy(raw)).toThrow();
   });
+
+  it("parses and validates institution holiday calendar (§8.1)", () => {
+    const policy = loadPolicyFile();
+    expect(policy.calendar).toBeDefined();
+    expect(Array.isArray(policy.calendar.holidays)).toBe(true);
+    expect(policy.calendar.holidays).toContain("2026-10-20");
+  });
 });

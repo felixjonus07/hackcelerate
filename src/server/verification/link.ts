@@ -5,7 +5,6 @@
  * basic owner-name matching on the page content. Login-wall pages
  * result in LIVE_UNVERIFIED per the reference plan.
  */
-import { logger } from "../logger";
 
 /* ────────────────── Types ────────────────── */
 

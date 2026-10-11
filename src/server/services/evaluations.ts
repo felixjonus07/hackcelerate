@@ -116,7 +116,7 @@ export async function runEvaluation(studentId: string, opts: { actorUserId?: str
         copyRoles: r.copyRoles,
         queued: r.queued,
         proposedMessage: narrative.narrative.prescriptive_action_plan[0]?.action ?? r.label,
-        slaDueAt: addWorkingDays(now, r.slaWorkingDays),
+        slaDueAt: addWorkingDays(now, r.slaWorkingDays, policy.calendar?.holidays),
         closureRule: r.closure,
       });
     }
