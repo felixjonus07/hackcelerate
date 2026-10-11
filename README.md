@@ -197,6 +197,20 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
 - Added comprehensive rubric specification suite (`src/server/rules/__tests__/rubrics.test.ts`, 10 tests) and fast-check property testing suite (`src/server/rules/__tests__/properties.test.ts`, 21,000 runs) proving score boundedness in [0, 100] and monotonicity (adding verified evidence never lowers a score, §15.1).
 - Reviewed rendered UI with Playwright CLI at desktop (1440) and mobile (390) viewports with zero horizontal overflow.
 
+### 2026-10-11: Phase 3 — Evidence verification layer completion (§6)
+- Implemented artifact status lifecycle (§6.1) in `src/server/verification/lifecycle.ts` with strict allowed transitions table, transaction atomicity, actor attribution, and append-only audit event logging on every status change.
+- Added asynchronous verification workers integrated with BullMQ queue (`src/server/verification/`):
+  - GitHub worker: OAuth repo ownership, REST metadata, authorship, and fork detection (§6.2).
+  - Crossref DOI worker: DOI lookup with student name matching and mentor review fallback.
+  - Link worker: HTTP liveness verification, SSRF protection, and public profile owner-name match.
+  - Certificate / internship letters: review flow for named reviewer attestation (`ATTESTED`).
+  - External mock report sampling: 10% deterministic pseudorandom sampling per academic term (`sampling.ts`).
+- Implemented integrity checks (§6.3) in `src/server/verification/integrity.ts`: implausible speed, burst commits, duplicate claims, streak padding, and reused content hash (flags for human review only; never altering scores directly).
+- Implemented object storage abstraction (`src/server/storage/index.ts`) supporting S3-compatible signed URLs (≤ 5 min expiration) with local fallback.
+- Added recheck scheduler (`src/server/verification/recheck.ts`) running daily via BullMQ to transition stale artifacts (`STALE` after one failed check, `UNVERIFIED` after two).
+- Database migration `0005_phase3_verification.sql` for verification lifecycle tables and columns.
+- Integration tests: 91 tests across `lifecycle.test.ts`, `integrity.test.ts`, and `workers.test.ts` (all passing).
+
 ### 2026-10-11: Vercel deployment configuration
 - Added `vercel.json`: framework nextjs, region bom1/Mumbai, auto-deploy restricted to `main` branch only (`git.deploymentEnabled`).
 - Added `scripts/vercel-ignore.mjs`: skips Vercel builds when only docs/config/e2e files changed (saves Hobby plan build minutes).

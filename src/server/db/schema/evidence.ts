@@ -190,8 +190,5 @@ export const samplingDecisions = pgTable(
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index("sampling_term_idx").on(t.term, t.selected),
-    index("sampling_candidate_idx").on(t.candidateId, t.term),
-  ],
+  (t) => [index("sampling_term_idx").on(t.term, t.selected), index("sampling_candidate_idx").on(t.candidateId, t.term)],
 );

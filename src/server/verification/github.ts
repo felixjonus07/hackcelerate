@@ -43,7 +43,8 @@ export interface GitHubVerificationResult {
 
 /* ────────────────── URL parsing ────────────────── */
 
-const GITHUB_REPO_RE = /^https?:\/\/(?:www\.)?github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:[/#?].*)?$/;
+const GITHUB_REPO_RE =
+  /^https?:\/\/(?:www\.)?github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:[/#?].*)?$/;
 
 export function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
   const m = url.match(GITHUB_REPO_RE);
@@ -97,10 +98,7 @@ interface RepoResponse {
   private: boolean;
 }
 
-export async function checkRepository(
-  url: string,
-  expectedLogin?: string,
-): Promise<GitHubVerificationResult> {
+export async function checkRepository(url: string, expectedLogin?: string): Promise<GitHubVerificationResult> {
   const parsed = parseGitHubUrl(url);
   if (!parsed) {
     return { verified: false, needsReview: false, reason: "Not a valid GitHub repository URL", retryable: false };
@@ -112,41 +110,101 @@ export async function checkRepository(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("abort") || msg.includes("timeout")) {
-      return { verified: false, needsReview: false, reason: "GitHub API request timed out", retryable: true, errorCategory: "network" };
+      return {
+        verified: false,
+        needsReview: false,
+        reason: "GitHub API request timed out",
+        retryable: true,
+        errorCategory: "network",
+      };
     }
-    return { verified: false, needsReview: false, reason: "Network error reaching GitHub API", retryable: true, errorCategory: "network" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "Network error reaching GitHub API",
+      retryable: true,
+      errorCategory: "network",
+    };
   }
 
   // Handle error responses
   if (res.status === 404) {
-    return { verified: false, needsReview: false, reason: "Repository not found or private", retryable: false, errorCategory: "not_found" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "Repository not found or private",
+      retryable: false,
+      errorCategory: "not_found",
+    };
   }
   if (res.status === 401) {
-    return { verified: false, needsReview: false, reason: "GitHub API authentication failed", retryable: false, errorCategory: "auth" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "GitHub API authentication failed",
+      retryable: false,
+      errorCategory: "auth",
+    };
   }
   if (res.status === 403) {
     const rl = parseRateLimit(res);
     if (rl.remaining === 0) {
       logger.warn({ resetAt: rl.resetAt.toISOString() }, "GitHub API rate limit reached");
-      return { verified: false, needsReview: false, reason: "GitHub API rate limit reached", retryable: true, errorCategory: "rate_limit" };
+      return {
+        verified: false,
+        needsReview: false,
+        reason: "GitHub API rate limit reached",
+        retryable: true,
+        errorCategory: "rate_limit",
+      };
     }
-    return { verified: false, needsReview: false, reason: "GitHub API access denied", retryable: false, errorCategory: "auth" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "GitHub API access denied",
+      retryable: false,
+      errorCategory: "auth",
+    };
   }
   if (res.status === 429) {
-    return { verified: false, needsReview: false, reason: "GitHub API secondary rate limit", retryable: true, errorCategory: "rate_limit" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "GitHub API secondary rate limit",
+      retryable: true,
+      errorCategory: "rate_limit",
+    };
   }
   if (res.status >= 500) {
-    return { verified: false, needsReview: false, reason: `GitHub API server error (${res.status})`, retryable: true, errorCategory: "server" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: `GitHub API server error (${res.status})`,
+      retryable: true,
+      errorCategory: "server",
+    };
   }
   if (!res.ok) {
-    return { verified: false, needsReview: false, reason: `GitHub API error (${res.status})`, retryable: false, errorCategory: "malformed" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: `GitHub API error (${res.status})`,
+      retryable: false,
+      errorCategory: "malformed",
+    };
   }
 
   let repo: RepoResponse;
   try {
     repo = (await res.json()) as RepoResponse;
   } catch {
-    return { verified: false, needsReview: false, reason: "Malformed GitHub API response", retryable: true, errorCategory: "malformed" };
+    return {
+      verified: false,
+      needsReview: false,
+      reason: "Malformed GitHub API response",
+      retryable: true,
+      errorCategory: "malformed",
+    };
   }
 
   const metadata: GitHubVerificationResult["metadata"] = {
@@ -285,7 +343,6 @@ export async function checkCommitAuthorship(
     // Check git commit email
     if (emailLower && c.commit.author.email.toLowerCase() === emailLower) {
       authoredCount++;
-      continue;
     }
   }
 

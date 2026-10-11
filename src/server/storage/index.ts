@@ -10,7 +10,7 @@
  * When S3 is not configured, falls back to a local filesystem store
  * for development purposes only.
  */
-import { createHmac, createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../logger";
@@ -97,11 +97,7 @@ export interface UploadValidation {
   reason: string;
 }
 
-export function validateUpload(
-  contentType: string,
-  fileSize: number,
-  originalFilename: string,
-): UploadValidation {
+export function validateUpload(contentType: string, fileSize: number, originalFilename: string): UploadValidation {
   if (!ALLOWED_MIME_TYPES.has(contentType)) {
     return { valid: false, reason: `File type "${contentType}" is not allowed` };
   }
@@ -111,7 +107,10 @@ export function validateUpload(
   }
 
   if (fileSize > MAX_FILE_SIZE) {
-    return { valid: false, reason: `File size ${(fileSize / 1024 / 1024).toFixed(1)}MB exceeds the ${MAX_FILE_SIZE / 1024 / 1024}MB limit` };
+    return {
+      valid: false,
+      reason: `File size ${(fileSize / 1024 / 1024).toFixed(1)}MB exceeds the ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
+    };
   }
 
   // Check for path traversal in filename (even though we don't use it for storage)
@@ -135,8 +134,16 @@ export class S3Store implements ObjectStore {
 
   async put(key: string, body: Uint8Array, contentType: string): Promise<void> {
     const date = new Date();
-    const dateStr = date.toISOString().replace(/[:-]/g, "").replace(/\.\d+Z$/, "Z").slice(0, 8);
-    const amzDate = `${dateStr}T${date.toISOString().replace(/.*T/, "").replace(/[:-]/g, "").replace(/\.\d+Z$/, "")}Z`;
+    const dateStr = date
+      .toISOString()
+      .replace(/[:-]/g, "")
+      .replace(/\.\d+Z$/, "Z")
+      .slice(0, 8);
+    const amzDate = `${dateStr}T${date
+      .toISOString()
+      .replace(/.*T/, "")
+      .replace(/[:-]/g, "")
+      .replace(/\.\d+Z$/, "")}Z`;
     const payloadHash = createHash("sha256").update(body).digest("hex");
 
     const headers: Record<string, string> = {
@@ -168,7 +175,11 @@ export class S3Store implements ObjectStore {
     if (expiry <= 0) throw new Error("Expiry must be positive");
 
     const date = new Date();
-    const dateStr = date.toISOString().replace(/[:-]/g, "").replace(/\.\d+Z$/, "Z").slice(0, 8);
+    const dateStr = date
+      .toISOString()
+      .replace(/[:-]/g, "")
+      .replace(/\.\d+Z$/, "Z")
+      .slice(0, 8);
     const credential = `${this.config.accessKeyId}/${dateStr}/${this.config.region}/s3/aws4_request`;
 
     // Build pre-signed URL query parameters
@@ -239,10 +250,7 @@ export class LocalStore implements ObjectStore {
     const expiry = Math.min(expiresInSeconds, MAX_SIGNED_URL_SECONDS);
     if (expiry <= 0) throw new Error("Expiry must be positive");
     // For local dev, return a file path with a mock signature
-    const token = createHash("sha256")
-      .update(`${key}:${Date.now()}:${expiry}`)
-      .digest("hex")
-      .slice(0, 16);
+    const token = createHash("sha256").update(`${key}:${Date.now()}:${expiry}`).digest("hex").slice(0, 16);
     return `/api/v1/storage/${key}?token=${token}&expires=${Date.now() + expiry * 1000}`;
   }
 
@@ -290,4 +298,4 @@ export function setStorage(store: ObjectStore): void {
 }
 
 // Re-export the interface type for backwards compatibility with the old module
-export { type ObjectStore as ObjectStoreInterface };
+export type { ObjectStore as ObjectStoreInterface };

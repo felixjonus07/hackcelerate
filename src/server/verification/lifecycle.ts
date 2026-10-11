@@ -123,10 +123,7 @@ export class LifecycleError extends Error {
  *
  * @throws LifecycleError on validation or concurrency failure.
  */
-export async function transitionArtifact(
-  req: TransitionRequest,
-  deps: TransitionDeps,
-): Promise<TransitionResult> {
+export async function transitionArtifact(req: TransitionRequest, deps: TransitionDeps): Promise<TransitionResult> {
   // 1. Validate reason is not empty.
   if (!req.reason || req.reason.trim().length === 0) {
     throw new LifecycleError("MISSING_REASON", "A transition reason is required");
@@ -160,18 +157,12 @@ export async function transitionArtifact(
 
     // 4. Idempotent: already in target status.
     if (fromStatus === req.toStatus) {
-      throw new LifecycleError(
-        "ALREADY_IN_TARGET_STATUS",
-        `Artifact is already ${req.toStatus}`,
-      );
+      throw new LifecycleError("ALREADY_IN_TARGET_STATUS", `Artifact is already ${req.toStatus}`);
     }
 
     // 5. Validate the transition is in the allowed table.
     if (!canTransition(fromStatus, req.toStatus)) {
-      throw new LifecycleError(
-        "INVALID_TRANSITION",
-        `Transition ${fromStatus} → ${req.toStatus} is not allowed`,
-      );
+      throw new LifecycleError("INVALID_TRANSITION", `Transition ${fromStatus} → ${req.toStatus} is not allowed`);
     }
 
     // 6. Validate actor kind.
@@ -194,10 +185,7 @@ export async function transitionArtifact(
       .returning({ id: deps.artifacts.id });
 
     if (updateResult.length === 0) {
-      throw new LifecycleError(
-        "CONCURRENT_MODIFICATION",
-        `Artifact ${req.artifactId} status changed concurrently`,
-      );
+      throw new LifecycleError("CONCURRENT_MODIFICATION", `Artifact ${req.artifactId} status changed concurrently`);
     }
 
     // 8. Write the append-only status event.
@@ -250,7 +238,8 @@ export function getRealDeps(): TransitionDeps {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { db } = require("../db") as typeof import("../db");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { artifacts, artifactStatusEvents } = require("../db/schema/evidence") as typeof import("../db/schema/evidence");
+  const { artifacts, artifactStatusEvents } =
+    require("../db/schema/evidence") as typeof import("../db/schema/evidence");
   _cachedDeps = { db: db as TransitionDeps["db"], artifacts, artifactStatusEvents };
   return _cachedDeps!;
 }

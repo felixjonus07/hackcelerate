@@ -4,17 +4,17 @@
  * without a live database.
  */
 import { describe, expect, it } from "vitest";
-import {
-  type ActorKind,
-  LifecycleError,
-  TRANSITIONS,
-  canTransition,
-  transitionArtifact,
-  type TransitionDeps,
-  type TransitionRequest,
-} from "../lifecycle";
 import type { VerificationStatus } from "../../policy/schema";
 import { VERIFICATION_STATUSES } from "../../policy/schema";
+import {
+  type ActorKind,
+  canTransition,
+  LifecycleError,
+  TRANSITIONS,
+  type TransitionDeps,
+  type TransitionRequest,
+  transitionArtifact,
+} from "../lifecycle";
 
 /* ──────────────── Mock DB for testing ──────────────── */
 
@@ -598,7 +598,13 @@ describe("§6.1 transitionArtifact()", () => {
 
     // Second failed recheck: STALE → UNVERIFIED
     await transitionArtifact(
-      { artifactId, toStatus: "UNVERIFIED", actorId: "recheck-worker", actorKind: "system", reason: "Recheck failed (2nd)" },
+      {
+        artifactId,
+        toStatus: "UNVERIFIED",
+        actorId: "recheck-worker",
+        actorKind: "system",
+        reason: "Recheck failed (2nd)",
+      },
       deps,
     );
     expect(artifact.status).toBe("UNVERIFIED");
@@ -618,7 +624,13 @@ describe("§6.1 transitionArtifact()", () => {
   it("student resubmit: REJECTED → SUBMITTED", async () => {
     const { deps, artifact, artifactId } = workingMock("REJECTED");
     await transitionArtifact(
-      { artifactId, toStatus: "SUBMITTED", actorId: "student-1", actorKind: "student", reason: "Resubmitted with new evidence" },
+      {
+        artifactId,
+        toStatus: "SUBMITTED",
+        actorId: "student-1",
+        actorKind: "student",
+        reason: "Resubmitted with new evidence",
+      },
       deps,
     );
     expect(artifact.status).toBe("SUBMITTED");
@@ -636,7 +648,13 @@ describe("§6.1 transitionArtifact()", () => {
   it("login-wall lifecycle: UNDER_CHECK → LIVE_UNVERIFIED", async () => {
     const { deps, artifact, artifactId } = workingMock("UNDER_CHECK");
     await transitionArtifact(
-      { artifactId, toStatus: "LIVE_UNVERIFIED", actorId: "link-worker", actorKind: "system", reason: "Login wall detected" },
+      {
+        artifactId,
+        toStatus: "LIVE_UNVERIFIED",
+        actorId: "link-worker",
+        actorKind: "system",
+        reason: "Login wall detected",
+      },
       deps,
     );
     expect(artifact.status).toBe("LIVE_UNVERIFIED");
