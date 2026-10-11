@@ -197,6 +197,13 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
 - Added comprehensive rubric specification suite (`src/server/rules/__tests__/rubrics.test.ts`, 10 tests) and fast-check property testing suite (`src/server/rules/__tests__/properties.test.ts`, 21,000 runs) proving score boundedness in [0, 100] and monotonicity (adding verified evidence never lowers a score, §15.1).
 - Reviewed rendered UI with Playwright CLI at desktop (1440) and mobile (390) viewports with zero horizontal overflow.
 
+### 2026-10-11: Vercel deployment configuration
+- Added `vercel.json`: framework nextjs, region bom1/Mumbai, auto-deploy restricted to `main` branch only (`git.deploymentEnabled`).
+- Added `scripts/vercel-ignore.mjs`: skips Vercel builds when only docs/config/e2e files changed (saves Hobby plan build minutes).
+- External services required: Neon PostgreSQL (pgvector), Upstash Redis (TCP), BullMQ worker on Railway/Render.
+- All env vars in `.env.example`; minimum required in Vercel: `BETTER_AUTH_SECRET`, `DATABASE_URL`, `REDIS_URL`, `APP_URL`, `BETTER_AUTH_URL`, `NODE_ENV`, `POLICY_FILE`.
+- Node 22.x must be selected in Vercel project settings (`engines` in `package.json`).
+
 ## Roadmap (post-freeze ideas go here)
 
 
