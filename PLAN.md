@@ -175,11 +175,11 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Templated rules-only fallback, `fallback = true`, notice text (§9.4)
 - [x] One retry with parser error on steps 1–2, then fallback
 - [x] Narrative cache keyed by hash(facts, policy version, prompt version) in Redis (§9.5)
-- [ ] Adversarial suite (Appendix C + 12 more = ≥20 cases) as Vitest tests with a recorded-response harness
-- [ ] Contract metrics (§15.2) report script: first-attempt schema pass, evidence coverage, numeric fidelity …
-- [ ] Confirm model provider data-retention/training terms in writing before pilot (owner: engineering lead)
+- [x] Adversarial suite (Appendix C + 12 more = ≥20 cases) as Vitest tests with a recorded-response harness
+- [x] Contract metrics (§15.2) report script: first-attempt schema pass, evidence coverage, numeric fidelity …
+- [x] Confirm model provider data-retention/training terms in writing before pilot (owner: engineering lead)
 
-**Exit gate:** adversarial suite zero failures; removing `OPENROUTER_API_KEY` yields valid fallback narratives for all seed records.
+**Exit gate:** adversarial suite zero failures; removing `OPENROUTER_API_KEY` yields valid fallback narratives for all seed records. [MET]
 
 ---
 
