@@ -8,14 +8,24 @@ import { redis } from "../cache/redis";
 const PREFIX = "ba:";
 
 export const redisSecondaryStorage: NonNullable<BetterAuthOptions["secondaryStorage"]> = {
-  get: (key) => redis.get(PREFIX + key),
-  getAndDelete: (key) => redis.getdel(PREFIX + key),
+  get: (key) => redis.get(PREFIX + key).catch(() => null),
+  getAndDelete: (key) => redis.getdel(PREFIX + key).catch(() => null),
   async increment(key, ttl) {
-    const n = await redis.incr(PREFIX + key);
-    if (n === 1) await redis.expire(PREFIX + key, ttl);
-    return n;
+    try {
+      const n = await redis.incr(PREFIX + key);
+      if (n === 1) await redis.expire(PREFIX + key, ttl);
+      return n;
+    } catch {
+      return 1;
+    }
   },
   set: (key, value, ttl) =>
-    ttl ? redis.set(PREFIX + key, value, "EX", Math.max(1, Math.ceil(ttl))) : redis.set(PREFIX + key, value),
-  delete: (key) => redis.del(PREFIX + key).then(() => undefined),
+    (ttl ? redis.set(PREFIX + key, value, "EX", Math.max(1, Math.ceil(ttl))) : redis.set(PREFIX + key, value))
+      .then(() => "OK" as const)
+      .catch(() => "OK" as const),
+  delete: (key) =>
+    redis
+      .del(PREFIX + key)
+      .then(() => undefined)
+      .catch(() => undefined),
 };

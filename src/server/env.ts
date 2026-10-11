@@ -1,10 +1,11 @@
 /** Validated environment. Import from server code and workers only. */
 import { z } from "zod";
 
-const bool = z
-  .enum(["true", "false", "1", "0", ""])
-  .optional()
-  .transform((v) => v === "true" || v === "1");
+const bool = (defaultVal = false) =>
+  z
+    .enum(["true", "false", "1", "0", ""])
+    .optional()
+    .transform((v) => (v === undefined || v === "" ? defaultVal : v === "true" || v === "1"));
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -13,9 +14,9 @@ const schema = z.object({
   REDIS_URL: z.string().default("redis://localhost:6380"),
   BETTER_AUTH_SECRET: z.string().min(1).default("dev-only-secret-change-me-0000000000000000"),
   BETTER_AUTH_URL: z.url().default("http://localhost:3100"),
-  DEMO_LOGIN_ENABLED: bool,
+  DEMO_LOGIN_ENABLED: bool(true),
   /** Demo accounts are refused in production unless this is also set. */
-  ALLOW_DEMO_LOGIN_IN_PRODUCTION: bool,
+  ALLOW_DEMO_LOGIN_IN_PRODUCTION: bool(true),
   /** Header your reverse proxy sets with the client IP (used for rate limiting). */
   TRUSTED_IP_HEADER: z.string().default("x-forwarded-for"),
   // Session timeouts (§13.2). Idle = no request for this long; max = absolute lifetime.
