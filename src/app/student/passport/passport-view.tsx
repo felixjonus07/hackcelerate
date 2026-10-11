@@ -49,8 +49,21 @@ export function PassportView({ data }: { data: PassportData }) {
           <p id="score-h" className="text-sm font-bold text-ink-2">
             {data.trackName} · track score
           </p>
-          <p className="tabular mt-1 text-[3.5rem] font-black leading-none tracking-tight">{score1(ev.trackScore)}</p>
-          <ReadinessBar score={ev.trackScore} readiness={ev.readiness} />
+          {result?.trackScore?.gateFailed ? (
+            <div className="mt-3">
+              <p className="text-2xl font-black text-ink">{result.trackScore.gateFailed}</p>
+              <p className="mt-2 text-sm text-ink-2">
+                A track gate prerequisite is not met yet. Meet the requirement to reveal your score.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="tabular mt-1 text-[3.5rem] font-black leading-none tracking-tight">
+                {score1(ev.trackScore)}
+              </p>
+              <ReadinessBar score={ev.trackScore} readiness={ev.readiness} />
+            </>
+          )}
           <div className="mt-4 flex flex-wrap items-center gap-2 text-ink-2">
             <span>
               Your target readiness is <strong className="tabular text-ink">{ev.readiness}</strong>.

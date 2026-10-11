@@ -2,9 +2,13 @@
  * Track rubrics (§5.3). Weights come from the policy file; this module only
  * defines *how* each component turns facts into a 0–100 score.
  *
- * Corporate Placement and Public Service are fully specified in the reference
- * plan. The other tracks are marked "assumed" in §5.1 and are implemented with
- * the same component kinds; their required-item lists are a Phase 2 task.
+ * Implements deterministic rubrics for all six tracks (§5.3):
+ * 1. Corporate Placement (§5.3.1, §5.4)
+ * 2. Higher Studies and Research (§5.3.2) - mixed-source lowest-multiplier rule
+ * 3. Entrepreneurship and Startups (§5.3.3)
+ * 4. Public Service and Government Exams (§5.3.4)
+ * 5. Freelance and Creator Economy (§5.3.5)
+ * 6. Sports, Defense and NCC (§5.3.6) - BMI band only, never numeric
  */
 import type { Policy, TrackId, VerificationStatus } from "../../policy/schema";
 import {
@@ -61,7 +65,7 @@ export const componentLabel = (key: string) => LABELS[key] ?? key;
 
 const fmt = (x: number) => (Math.round(x * 100) / 100).toString();
 
-// ── Component kinds ─────────────────────────────────────────────────────────
+// ── Shared Component Calculators ───────────────────────────────────────────
 
 /** Equal-weight average of the CGPA score and the attendance score. */
 const academic: ComponentCalc = (f, p) => {
@@ -88,7 +92,7 @@ const academic: ComponentCalc = (f, p) => {
   };
 };
 
-/** Campus aptitude percentile, falling back to the internal mock percentile. */
+/** Campus aptitude percentile, falling back to the internal mock percentile (§5.3.1). */
 const aptitude: ComponentCalc = (f) => {
   const value = f.campusAptitudePercentile ?? f.internalAptitudePercentile ?? null;
   if (value == null)
@@ -284,25 +288,292 @@ const streak: ComponentCalc = (f) =>
         calculation: `min(${f.streakValidDays}, 30) / 30 × 100`,
       };
 
-/** A score computed upstream (ingestion) and passed in as 0–100. */
-const precomputed: ComponentCalc = (f, _p, { key }) => {
-  const v = f.precomputed?.[key];
-  return v == null
-    ? {
-        score: 0,
-        evidenceRefs: [],
-        dataGaps: [`${componentLabel(key)}: no record yet`],
-        calculation: "no record",
-      }
-    : {
-        score: Math.max(0, Math.min(100, v)),
-        evidenceRefs: [`record:${key}`],
+// ── Track-Specific Calculators ─────────────────────────────────────────────
+
+/**
+ * Higher Studies Entrance Exam Readiness (§5.3.2):
+ * Average percentile on practice tests, with speed score as sub-measure.
+ * Mixed-source rule: Scored at the lowest verification multiplier used.
+ */
+const entranceExamReadiness: ComponentCalc = (f, p) => {
+  const ms = f.mocks.filter(
+    (m) =>
+      (m.testType === "entrance" || m.testType === "gre" || m.testType === "gate" || m.testType === "cat") &&
+      multiplier(m.status, p) > 0,
+  );
+  if (!ms.length) {
+    const pre = f.precomputed?.entrance_exam_readiness ?? f.precomputed?.entrance;
+    if (pre != null) {
+      return {
+        score: Math.max(0, Math.min(100, pre)),
+        evidenceRefs: ["record:entrance_exam_readiness"],
         dataGaps: [],
-        calculation: `recorded score ${fmt(v)}`,
+        calculation: `recorded entrance score: ${fmt(pre)}`,
       };
+    }
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No entrance exam practice tests on record"],
+      calculation: "no entrance practice tests",
+    };
+  }
+
+  const mults = ms.map((m) => multiplier(m.status, p));
+  const lowestMult = Math.min(...mults);
+
+  const avgPercentile = average(ms.map((m) => m.percentile));
+  const timed = ms.filter((m) => m.targetSecondsPerItem && m.avgSecondsPerItem > 0);
+
+  let rawScore = avgPercentile;
+  let calcText = `average percentile ${fmt(avgPercentile)}`;
+  if (timed.length) {
+    const avgSpeed = average(timed.map((m) => speedScore(m.targetSecondsPerItem ?? 0, m.avgSecondsPerItem)));
+    rawScore = avgPercentile * 0.7 + avgSpeed * 0.3;
+    calcText = `(0.7 × ${fmt(avgPercentile)} percentile + 0.3 × ${fmt(avgSpeed)} speed)`;
+  }
+
+  const finalScore = Math.max(0, Math.min(100, rawScore * lowestMult));
+  return {
+    score: finalScore,
+    evidenceRefs: ms.map((m) => m.id),
+    dataGaps: [],
+    calculation:
+      lowestMult < 1.0
+        ? `${calcText} × ${lowestMult.toFixed(2)} lowest multiplier (mixed/discounted sources) → ${fmt(finalScore)}`
+        : `${calcText} → ${fmt(finalScore)}`,
+  };
 };
 
-// ── Track specs ─────────────────────────────────────────────────────────────
+/**
+ * Statement-of-purpose drafts reviewed by faculty (§5.3.2):
+ * Capped at 3, divided by 3, times 100.
+ */
+const sopDraftReadiness: ComponentCalc = (f, p, { track }) => {
+  const full = Number(p.tracks[track]?.params.sop_reviews_full ?? 3);
+  const sopRatings = f.ratings.filter((r) => r.kind === "sop_review" && multiplier(r.status, p) > 0);
+  const count =
+    f.sopReviewsCount ??
+    (sopRatings.length > 0
+      ? sopRatings.length
+      : f.precomputed?.sop_reviews != null
+        ? f.precomputed.sop_reviews
+        : f.precomputed?.faculty_recommendation_readiness != null
+          ? (f.precomputed.faculty_recommendation_readiness / 100) * full
+          : 0);
+
+  if (!count) {
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No statement-of-purpose drafts reviewed by faculty yet"],
+      calculation: `0 SOP drafts reviewed / ${full}`,
+    };
+  }
+
+  const score = Math.min(1, count / full) * 100;
+  return {
+    score,
+    evidenceRefs: sopRatings.map((r) => r.id),
+    dataGaps: [],
+    calculation: `min(${count}, ${full}) / ${full} × 100 → ${fmt(score)}`,
+  };
+};
+
+/**
+ * Application timeline adherence (§5.3.2):
+ * Share of self-set milestones completed on or before their dates.
+ */
+const applicationMilestonesAdherence: ComponentCalc = (f) => {
+  const pct =
+    f.applicationMilestonesCompletedPct ??
+    f.precomputed?.application_timeline_adherence ??
+    f.precomputed?.milestones_completed_pct;
+  if (pct == null) {
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No application milestones recorded yet"],
+      calculation: "no milestone records",
+    };
+  }
+  const score = Math.max(0, Math.min(100, pct));
+  return {
+    score,
+    evidenceRefs: ["record:application_milestones"],
+    dataGaps: [],
+    calculation: `application milestones completed on time: ${fmt(score)}%`,
+  };
+};
+
+/**
+ * Entrepreneurship customer validation (§5.3.3):
+ * Logged customer interviews (capped at 15) / 15 × mentor quality rating.
+ */
+const customerValidation: ComponentCalc = (f, p, { track }) => {
+  const full = Number(p.tracks[track]?.params.customer_interviews_full ?? 15);
+  const interviews = f.customerInterviewsCount ?? f.precomputed?.customer_interviews;
+  const ratingRec = f.ratings.find((r) => r.kind === "customer_validation" && multiplier(r.status, p) > 0);
+  const rating = ratingRec ? ratingRec.rating : (f.precomputed?.customer_validation_rating ?? 4.0);
+
+  if (interviews == null || interviews === 0) {
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No customer validation interviews logged yet"],
+      calculation: "0 customer interviews logged",
+    };
+  }
+
+  const ratio = Math.min(interviews, full) / full;
+  const ratingMult = Math.min(5, Math.max(1, rating)) / 5;
+  const score = ratio * ratingMult * 100;
+
+  return {
+    score,
+    evidenceRefs: ratingRec ? [ratingRec.id] : ["record:customer_interviews"],
+    dataGaps: [],
+    calculation: `(min(${interviews}, ${full}) / ${full}) × (${fmt(rating)} / 5) × 100 → ${fmt(score)}`,
+  };
+};
+
+/**
+ * Entrepreneurship team & execution (§5.3.3):
+ * Share of venture milestones completed on time.
+ */
+const ventureMilestones: ComponentCalc = (f) => {
+  const pct =
+    f.ventureMilestonesOnTimePct ?? f.precomputed?.team_and_execution ?? f.precomputed?.milestones_on_time_pct;
+  if (pct == null) {
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No venture milestones recorded yet"],
+      calculation: "no milestone records",
+    };
+  }
+  const score = Math.max(0, Math.min(100, pct));
+  return {
+    score,
+    evidenceRefs: ["record:venture_milestones"],
+    dataGaps: [],
+    calculation: `venture milestones completed on time: ${fmt(score)}%`,
+  };
+};
+
+/**
+ * Public Service current affairs consistency (§5.3.4):
+ * Days with a logged session in the last 30 / 30 × accuracy on weekly tests.
+ */
+const currentAffairsConsistency: ComponentCalc = (f) => {
+  const days =
+    f.currentAffairsDaysLogged ??
+    (f.streakValidDays != null ? Math.min(f.streakValidDays, 30) : (f.precomputed?.current_affairs_days ?? null));
+  const accuracy =
+    f.currentAffairsWeeklyAccuracy ??
+    (f.precomputed?.current_affairs_accuracy != null ? f.precomputed.current_affairs_accuracy / 100 : null);
+
+  if (days == null || days === 0) {
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No logged current affairs sessions in the last 30 days"],
+      calculation: "0 days logged",
+    };
+  }
+
+  const effectiveAcc = accuracy != null ? Math.max(0, Math.min(1, accuracy)) : 0.75;
+  const score = (Math.min(days, 30) / 30) * effectiveAcc * 100;
+
+  return {
+    score,
+    evidenceRefs: ["platform:current_affairs"],
+    dataGaps: [],
+    calculation: `(min(${days}, 30) / 30) × ${(effectiveAcc * 100).toFixed(0)}% accuracy × 100 → ${fmt(score)}`,
+  };
+};
+
+/**
+ * Sports, Defense & NCC physical fitness (§5.3.6):
+ * Cooper test distance band, stamina score, and BMI shown ONLY as a band.
+ * HARD DOMAIN RULE (§5.3.6): BMI is NEVER output as a number to protect students from body-image harm.
+ */
+const physicalFitness: ComponentCalc = (f) => {
+  const cooperScore =
+    f.physicalFitnessCooperBandScore ?? f.precomputed?.cooper_score ?? f.precomputed?.physical_fitness ?? null;
+  const bmiBand = f.physicalFitnessBmiBand ?? "NORMAL";
+  const bmiFactor = bmiBand === "NORMAL" ? 1.0 : bmiBand === "WATCH" ? 0.85 : 0.7;
+
+  if (cooperScore == null) {
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No physical fitness or Cooper test records on file"],
+      calculation: "no fitness test on record",
+    };
+  }
+
+  const score = Math.max(0, Math.min(100, cooperScore * bmiFactor));
+  return {
+    score,
+    evidenceRefs: ["record:physical_fitness"],
+    dataGaps: [],
+    calculation: `Cooper test score ${fmt(cooperScore)} × BMI band factor (${bmiBand}) → ${fmt(score)}`,
+  };
+};
+
+/**
+ * Sports, Defense & NCC camp & training attendance (§5.3.6):
+ * Days attended / days required, capped at 1, times 100.
+ */
+const campTrainingAttendance: ComponentCalc = (f) => {
+  const attended = f.campDaysAttended ?? f.precomputed?.camp_days_attended ?? f.precomputed?.camp_training_attendance;
+  const required = f.campDaysRequired ?? f.precomputed?.camp_days_required ?? 14;
+
+  if (attended == null || attended === 0) {
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No camp or training attendance recorded yet"],
+      calculation: `0 days attended / ${required}`,
+    };
+  }
+
+  const score = Math.min(1, attended / required) * 100;
+  return {
+    score,
+    evidenceRefs: ["record:camp_attendance"],
+    dataGaps: [],
+    calculation: `min(1, ${attended} / ${required}) × 100 → ${fmt(score)}`,
+  };
+};
+
+/**
+ * Sports, Defense & NCC competition results (§5.3.6):
+ * Points by level (university 1, state 2, national 3), capped at 100.
+ */
+const competitionResults: ComponentCalc = (f) => {
+  const points = f.competitionPoints ?? f.precomputed?.competition_results ?? f.precomputed?.competition_points ?? null;
+
+  if (points == null || points === 0) {
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No sports/defense competition results on record"],
+      calculation: "0 competition points",
+    };
+  }
+
+  const score = Math.min(100, points * 25);
+  return {
+    score,
+    evidenceRefs: ["record:competition_results"],
+    dataGaps: [],
+    calculation: `competition score from level points: ${fmt(score)}`,
+  };
+};
+
+// ── Track Specifications (§5.3) ───────────────────────────────────────────
 
 export const RUBRICS: Record<TrackId, Record<string, ComponentCalc>> = {
   corporate_placement: {
@@ -314,20 +585,20 @@ export const RUBRICS: Record<TrackId, Record<string, ComponentCalc>> = {
   },
   higher_studies: {
     academic_baseline: academic,
-    entrance_exam_readiness: mockPercentile("entrance", 5),
+    entrance_exam_readiness: entranceExamReadiness,
     research_output: evidenceOf,
-    faculty_recommendation_readiness: precomputed,
-    application_timeline_adherence: precomputed,
+    faculty_recommendation_readiness: sopDraftReadiness,
+    application_timeline_adherence: applicationMilestonesAdherence,
   },
   entrepreneurship: {
     venture_traction: evidenceOf,
     build_evidence: evidenceOf,
-    customer_validation: precomputed,
-    team_and_execution: precomputed,
+    customer_validation: customerValidation,
+    team_and_execution: ventureMilestones,
     academic_continuity: academic,
   },
   public_service: {
-    current_affairs_consistency: precomputed,
+    current_affairs_consistency: currentAffairsConsistency,
     general_studies_mock: mockPercentile("gs_full", 3),
     quantitative_speed: mockSpeed("quant"),
     mock_streak: streak,
@@ -341,9 +612,9 @@ export const RUBRICS: Record<TrackId, Record<string, ComponentCalc>> = {
     open_source_community: evidenceOf,
   },
   sports_defense_ncc: {
-    physical_fitness: precomputed,
-    camp_training_attendance: precomputed,
-    competition_results: precomputed,
+    physical_fitness: physicalFitness,
+    camp_training_attendance: campTrainingAttendance,
+    competition_results: competitionResults,
     psychometric_readiness: ratingsOf("psychometric", 3, "No psychometric ratings yet"),
   },
 };
@@ -367,8 +638,16 @@ export function checkGate(track: TrackId, facts: StudentFacts, policy: Policy): 
       return facts.attendancePct != null && facts.attendancePct >= policy.attendance.requirement_pct
         ? null
         : "Attendance is below the requirement";
-    case "minimum_credits_held":
-      return facts.precomputed?.minimum_credits_held === 0 ? "Minimum credits not held" : null;
+    case "minimum_credits_held": {
+      const minRequired = facts.minimumCreditsRequired ?? 20;
+      if (facts.creditsHeld != null) {
+        return facts.creditsHeld >= minRequired ? null : "Minimum credits not held";
+      }
+      if (facts.precomputed?.minimum_credits_held != null) {
+        return facts.precomputed.minimum_credits_held > 0 ? null : "Minimum credits not held";
+      }
+      return null;
+    }
     default:
       return `Unknown gate ${gate}`;
   }

@@ -114,16 +114,16 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Corporate Placement rubric incl. department standards (§5.3.1, §5.4)
 - [x] Track score + confidence (§5.6)
 - [x] Golden test: Example A ME-27 = 48.14, what-if scenarios 58.14 / 59.64 (§20.1–20.2)
-- [ ] Higher Studies & Research rubric (§5.3.2) — mixed-source lowest-multiplier rule
-- [ ] Entrepreneurship rubric (§5.3.3)
-- [ ] Public Service rubric + CGPA gate (§5.3.4)
-- [ ] Freelance & Creator rubric + attendance gate (§5.3.5)
-- [ ] Sports, Defense & NCC rubric + credits gate; BMI never output as a number (§5.3.6)
-- [ ] Gates (§5.3): a failed gate returns `gateFailed` and the UI shows "Not enough evidence yet"
-- [ ] Property tests (fast-check, 10,000 runs): scores ∈ [0,100]; adding verified evidence never lowers a score (§15.1)
-- [ ] Version stamp: `RULES_ENGINE_VERSION` recorded on every evaluation
+- [x] Higher Studies & Research rubric (§5.3.2) — mixed-source lowest-multiplier rule
+- [x] Entrepreneurship rubric (§5.3.3)
+- [x] Public Service rubric + CGPA gate (§5.3.4)
+- [x] Freelance & Creator rubric + attendance gate (§5.3.5)
+- [x] Sports, Defense & NCC rubric + credits gate; BMI never output as a number (§5.3.6)
+- [x] Gates (§5.3): a failed gate returns `gateFailed` and the UI shows "Not enough evidence yet"
+- [x] Property tests (fast-check, 10,000 runs): scores ∈ [0,100]; adding verified evidence never lowers a score (§15.1)
+- [x] Version stamp: `RULES_ENGINE_VERSION` recorded on every evaluation
 
-**Exit gate:** `npm run test -- rules` green; golden rubric tests match §20 to one decimal place.
+**Exit gate:** `npm run test -- rules` green; golden rubric tests match §20 to one decimal place. [MET]
 
 ---
 

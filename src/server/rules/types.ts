@@ -21,6 +21,8 @@ export interface EvidenceItem {
   source?: string;
 }
 
+export type EvidenceFact = EvidenceItem;
+
 export interface MockAttempt {
   id: string;
   testType: string;
@@ -36,7 +38,7 @@ export interface MockAttempt {
 
 export interface FacultyRating {
   id: string;
-  kind: "mock_interview" | "answer_writing" | "psychometric" | "customer_validation";
+  kind: "mock_interview" | "answer_writing" | "psychometric" | "customer_validation" | "sop_review";
   date: string;
   /** Five-point scale. */
   rating: number;
@@ -78,9 +80,9 @@ export interface StudentFacts {
   attendanceWeekly?: WeeklySignal[];
   mockPercentileWeekly?: WeeklySignal[];
   /** Days (in the streak window) with a valid credit. */
-  streakValidDays?: number;
+  streakValidDays?: number | null;
   /** Gap days in the last 14 days of streak activity. */
-  streakGapDays14?: number;
+  streakGapDays14?: number | null;
   /** Count of platform activity events in the last 60 days. */
   activityLast60d?: number;
   mocksLast60d?: number;
@@ -95,6 +97,23 @@ export interface StudentFacts {
   precomputed?: Record<string, number | null>;
   /** Sources that failed within the confidence window (§5.6). */
   recentSourceFailures?: number;
+  /** Higher Studies (§5.3.2) */
+  sopReviewsCount?: number | null;
+  applicationMilestonesCompletedPct?: number | null;
+  /** Entrepreneurship (§5.3.3) */
+  customerInterviewsCount?: number | null;
+  ventureMilestonesOnTimePct?: number | null;
+  /** Public Service (§5.3.4) */
+  currentAffairsDaysLogged?: number | null;
+  currentAffairsWeeklyAccuracy?: number | null;
+  /** Sports, Defense & NCC (§5.3.6) - BMI shown only as a band, never numeric */
+  physicalFitnessBmiBand?: "NORMAL" | "WATCH" | "EVALUATE" | null;
+  physicalFitnessCooperBandScore?: number | null;
+  campDaysAttended?: number | null;
+  campDaysRequired?: number | null;
+  competitionPoints?: number | null;
+  creditsHeld?: number | null;
+  minimumCreditsRequired?: number | null;
 }
 
 export interface ComponentResult {
