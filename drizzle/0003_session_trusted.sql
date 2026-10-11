@@ -1,0 +1,1 @@
+ALTER TABLE "session" ADD COLUMN "trusted" boolean DEFAULT false NOT NULL;

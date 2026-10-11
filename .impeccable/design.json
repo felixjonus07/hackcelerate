@@ -1,0 +1,718 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T08:04:47+00:00",
+  "title": "Design System: AspirEdge AI",
+  "extensions": {
+    "world": {
+      "name": "Warm Consumer App",
+      "seedKey": "75d1ab63",
+      "mode": "Operate",
+      "source": "src/app/globals.css"
+    },
+    "colorMeta": {
+      "sand": {
+        "role": "neutral",
+        "displayName": "Sand",
+        "canonical": "#f6efe7",
+        "oklch": "oklch(95.5% 0.013 71.3)",
+        "dark": "#1c1714",
+        "tonalRamp": [
+          "#0c0b0a",
+          "#262523",
+          "#434240",
+          "#63615e",
+          "#85827d",
+          "#a9a49f",
+          "#cec8c1",
+          "#f4ede5"
+        ]
+      },
+      "sand-2": {
+        "role": "neutral",
+        "displayName": "Dune",
+        "canonical": "#efe5d9",
+        "oklch": "oklch(92.7% 0.019 72.6)",
+        "dark": "#251f1b",
+        "tonalRamp": [
+          "#0c0b09",
+          "#272522",
+          "#44413e",
+          "#65605c",
+          "#87817b",
+          "#aba49b",
+          "#d0c8bd",
+          "#f7ede1"
+        ]
+      },
+      "sand-3": {
+        "role": "neutral",
+        "displayName": "Deep Dune",
+        "canonical": "#e6d9ca",
+        "oklch": "oklch(89.2% 0.025 71.4)",
+        "dark": "#30281f",
+        "tonalRamp": [
+          "#0d0b08",
+          "#272522",
+          "#45413d",
+          "#666059",
+          "#898178",
+          "#ada398",
+          "#d3c7b9",
+          "#f9ecde"
+        ]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Card White",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "dark": "#26201c",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Seam",
+        "canonical": "#eadfd3",
+        "oklch": "oklch(90.9% 0.020 70.0)",
+        "dark": "#3a312b",
+        "tonalRamp": [
+          "#0d0b09",
+          "#272522",
+          "#45413e",
+          "#65605b",
+          "#87817a",
+          "#aca49b",
+          "#d1c7bd",
+          "#f7ede1"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Cocoa Ink",
+        "canonical": "#2b2420",
+        "oklch": "oklch(26.7% 0.013 51.6)",
+        "dark": "#f3eae0",
+        "tonalRamp": [
+          "#0f0a07",
+          "#2a231f",
+          "#47403d",
+          "#66605c",
+          "#86817e",
+          "#a8a4a2",
+          "#cbc8c7",
+          "#f0eeec"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Muted Cocoa",
+        "canonical": "#6f6259",
+        "oklch": "oklch(50.6% 0.022 56.9)",
+        "dark": "#bfaf9f",
+        "tonalRamp": [
+          "#0f0a06",
+          "#2b231e",
+          "#4a4039",
+          "#6b5e56",
+          "#8c8077",
+          "#ada39b",
+          "#d0c7c1",
+          "#f4ede8"
+        ]
+      },
+      "act": {
+        "role": "primary",
+        "displayName": "Saffron",
+        "canonical": "#c2490b",
+        "oklch": "oklch(56.3% 0.167 41.4)",
+        "dark": "#f26b1d",
+        "tonalRamp": [
+          "#240000",
+          "#4c0500",
+          "#771f00",
+          "#a53900",
+          "#ce5a2a",
+          "#eb865f",
+          "#ffb08f",
+          "#ffdbc0"
+        ]
+      },
+      "act-hover": {
+        "role": "primary",
+        "displayName": "Deep Saffron",
+        "canonical": "#a93e08",
+        "oklch": "oklch(50.8% 0.151 41.1)",
+        "dark": "#ff8a45",
+        "tonalRamp": [
+          "#250000",
+          "#4c0500",
+          "#762000",
+          "#a33a04",
+          "#c3633e",
+          "#e18c6d",
+          "#fdb69b",
+          "#ffe0ca"
+        ]
+      },
+      "act-bright": {
+        "role": "primary",
+        "displayName": "Bright Saffron",
+        "canonical": "#f26b1d",
+        "oklch": "oklch(68.4% 0.185 44.9)",
+        "dark": "#ff8a45",
+        "tonalRamp": [
+          "#1f0000",
+          "#460f00",
+          "#712600",
+          "#a03f00",
+          "#d05910",
+          "#fc7a38",
+          "#ffa772",
+          "#ffd3a7"
+        ]
+      },
+      "act-soft": {
+        "role": "primary",
+        "displayName": "Saffron Wash",
+        "canonical": "#fff1e8",
+        "oklch": "oklch(96.7% 0.019 55.2)",
+        "dark": "#3a2416",
+        "tonalRamp": [
+          "#0d0b09",
+          "#272423",
+          "#44413f",
+          "#65605d",
+          "#88817c",
+          "#aca39d",
+          "#d2c7bf",
+          "#f9ece3"
+        ]
+      },
+      "act-ink": {
+        "role": "primary",
+        "displayName": "On Saffron",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "dark": "#1c1714",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "low": {
+        "role": "secondary",
+        "displayName": "Leaf",
+        "canonical": "#2f6b2c",
+        "oklch": "oklch(47.2% 0.114 142.7)",
+        "dark": "#9fd39a",
+        "tonalRamp": [
+          "#001100",
+          "#022f02",
+          "#1b4f18",
+          "#377133",
+          "#5f915c",
+          "#88b284",
+          "#b2d4ae",
+          "#dcf7da"
+        ]
+      },
+      "low-bg": {
+        "role": "secondary",
+        "displayName": "Leaf Wash",
+        "canonical": "#e4f1e1",
+        "oklch": "oklch(94.4% 0.025 139.8)",
+        "dark": "#20331f",
+        "tonalRamp": [
+          "#0a0c09",
+          "#232623",
+          "#40433f",
+          "#5e635d",
+          "#7e857c",
+          "#9fa89d",
+          "#c2cdbf",
+          "#e6f3e3"
+        ]
+      },
+      "mod": {
+        "role": "secondary",
+        "displayName": "Ochre",
+        "canonical": "#8a5a00",
+        "oklch": "oklch(50.8% 0.108 73.3)",
+        "dark": "#f1c56a",
+        "tonalRamp": [
+          "#1a0500",
+          "#3a1d00",
+          "#5e3800",
+          "#855600",
+          "#a5793c",
+          "#c49e6c",
+          "#e4c39a",
+          "#ffeaca"
+        ]
+      },
+      "mod-bg": {
+        "role": "secondary",
+        "displayName": "Ochre Wash",
+        "canonical": "#fbefd2",
+        "oklch": "oklch(95.4% 0.040 88.2)",
+        "dark": "#3a2e14",
+        "tonalRamp": [
+          "#0d0b07",
+          "#272520",
+          "#45423b",
+          "#656156",
+          "#888273",
+          "#aca491",
+          "#d2c8b0",
+          "#faeed1"
+        ]
+      },
+      "crit": {
+        "role": "secondary",
+        "displayName": "Brick",
+        "canonical": "#a2312a",
+        "oklch": "oklch(48.3% 0.150 27.7)",
+        "dark": "#f4a199",
+        "tonalRamp": [
+          "#260000",
+          "#4e0001",
+          "#791915",
+          "#a5352e",
+          "#c36156",
+          "#e08a80",
+          "#fdb4aa",
+          "#ffdfd6"
+        ]
+      },
+      "crit-bg": {
+        "role": "secondary",
+        "displayName": "Brick Wash",
+        "canonical": "#fbe4e0",
+        "oklch": "oklch(93.6% 0.026 29.4)",
+        "dark": "#3d1f1c",
+        "tonalRamp": [
+          "#0e0a0a",
+          "#282423",
+          "#46403f",
+          "#685f5d",
+          "#8c7f7d",
+          "#b1a19e",
+          "#d8c4c1",
+          "#ffe9e5"
+        ]
+      },
+      "mark": {
+        "role": "neutral",
+        "displayName": "Data Mark",
+        "canonical": "#9c8a7b",
+        "oklch": "oklch(64.5% 0.031 62.1)",
+        "dark": "#9c8a7b",
+        "tonalRamp": [
+          "#0f0a06",
+          "#2b231d",
+          "#4a4037",
+          "#6c5e53",
+          "#907f71",
+          "#b2a294",
+          "#d5c6ba",
+          "#f9ece2"
+        ]
+      },
+      "series-1": {
+        "role": "data",
+        "displayName": "Series 1: Cocoa",
+        "canonical": "#2b2420",
+        "oklch": "oklch(26.7% 0.013 51.6)",
+        "dark": "#f3eae0",
+        "tonalRamp": [
+          "#0f0a07",
+          "#2a231f",
+          "#47403d",
+          "#66605c",
+          "#86817e",
+          "#a8a4a2",
+          "#cbc8c7",
+          "#f0eeec"
+        ]
+      },
+      "series-2": {
+        "role": "data",
+        "displayName": "Series 2: Sage",
+        "canonical": "#5f7f6a",
+        "oklch": "oklch(56.6% 0.049 155.8)",
+        "dark": "#8fb39a",
+        "tonalRamp": [
+          "#040e07",
+          "#182a1f",
+          "#314839",
+          "#4d6957",
+          "#6c8b77",
+          "#92ad9b",
+          "#b9d0c0",
+          "#e1f4e7"
+        ]
+      },
+      "series-3": {
+        "role": "data",
+        "displayName": "Series 3: Walnut",
+        "canonical": "#8a6d4b",
+        "oklch": "oklch(55.5% 0.061 70.5)",
+        "dark": "#c7a47a",
+        "tonalRamp": [
+          "#130900",
+          "#31220e",
+          "#523e25",
+          "#765c3d",
+          "#997d5d",
+          "#b9a084",
+          "#dbc5ad",
+          "#fdebd8"
+        ]
+      },
+      "series-4": {
+        "role": "data",
+        "displayName": "Series 4: Clay",
+        "canonical": "#7d5a50",
+        "oklch": "oklch(50.2% 0.049 36.6)",
+        "dark": "#c08b7d",
+        "tonalRamp": [
+          "#150704",
+          "#341f19",
+          "#563a32",
+          "#7a584e",
+          "#9a7a70",
+          "#ba9e95",
+          "#dbc3bc",
+          "#fdeae4"
+        ]
+      },
+      "series-5": {
+        "role": "data",
+        "displayName": "Series 5: Fawn",
+        "canonical": "#a89077",
+        "oklch": "oklch(66.8% 0.046 68.1)",
+        "dark": "#a89077",
+        "tonalRamp": [
+          "#100a04",
+          "#2d2319",
+          "#4d3f31",
+          "#6f5e4b",
+          "#947e67",
+          "#b7a189",
+          "#dac5b0",
+          "#fdebd9"
+        ]
+      },
+      "series-6": {
+        "role": "data",
+        "displayName": "Series 6: Moss",
+        "canonical": "#4e6151",
+        "oklch": "oklch(47.2% 0.034 149.5)",
+        "dark": "#7d9a82",
+        "tonalRamp": [
+          "#050e07",
+          "#1c291e",
+          "#374739",
+          "#546757",
+          "#778779",
+          "#9baa9d",
+          "#c1cdc2",
+          "#e8f1e9"
+        ]
+      },
+      "series-7": {
+        "role": "data",
+        "displayName": "Series 7: Oat",
+        "canonical": "#c8b9a6",
+        "oklch": "oklch(79.3% 0.031 73.8)",
+        "dark": "#6b5d50",
+        "tonalRamp": [
+          "#0d0b08",
+          "#28241f",
+          "#474139",
+          "#686055",
+          "#8b8073",
+          "#b0a392",
+          "#d5c7b4",
+          "#f9ecdc"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display-score": {
+        "displayName": "Display score",
+        "purpose": "The single big tabular score on a score card (3.25rem in what-if, 3rem on the staff deep-dive)."
+      },
+      "display-hero": {
+        "displayName": "Display hero",
+        "purpose": "Sign-in heading only; 2.4rem below 640px, max 16ch."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles in the page header; 1.75rem below 640px."
+      },
+      "title-lead": {
+        "displayName": "Title lead",
+        "purpose": "The next-step card heading."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Every card heading."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text, capped at 46 to 65ch."
+      },
+      "body-compact": {
+        "displayName": "Body compact",
+        "purpose": "Summaries and table text inside cards."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, figure captions, evidence chips, meta lines, small buttons."
+      },
+      "button": {
+        "displayName": "Button",
+        "purpose": "Medium button and side-nav labels."
+      },
+      "tag": {
+        "displayName": "Tag",
+        "purpose": "Pill tags (gap, trend, duration)."
+      },
+      "nav-micro": {
+        "displayName": "Nav micro",
+        "purpose": "Bottom-bar item labels only."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-card",
+        "value": "0 1px 2px rgb(43 36 32 / 0.05), 0 10px 28px -16px rgb(43 36 32 / 0.22)",
+        "dark": "0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px -16px rgb(0 0 0 / 0.6)",
+        "purpose": "Every card, the active side-nav pill, the selected queue item."
+      },
+      {
+        "name": "shadow-lift",
+        "value": "0 2px 4px rgb(43 36 32 / 0.06), 0 16px 32px -14px rgb(43 36 32 / 0.28)",
+        "dark": "0 2px 4px rgb(0 0 0 / 0.35), 0 16px 32px -14px rgb(0 0 0 / 0.7)",
+        "purpose": "An item while dragged (kanban)."
+      },
+      {
+        "name": "shadow-primary",
+        "value": "0 6px 16px -8px var(--act)",
+        "purpose": "Primary buttons only: a faint saffron pool that signals pressability."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-spring",
+        "value": "cubic-bezier(0.3, 1.22, 0.6, 1)",
+        "purpose": "Press: scale(0.97) over 160ms on buttons, nav items, switches and actionable cards (.press)."
+      },
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Glides: readiness fill and target tick (500ms), switch knob (200ms), shadow changes (200ms)."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "transition-duration: 1ms; animation-duration: 1ms",
+        "purpose": "Applied to everything under prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px",
+        "purpose": "Larger gutters (24px), card padding 24px, headline steps up."
+      },
+      {
+        "name": "md",
+        "value": "768px",
+        "purpose": "Occasional three-column stat rows."
+      },
+      {
+        "name": "lg",
+        "value": "1024px",
+        "purpose": "Side nav (260px) replaces the bottom bar; two-column card grids and list-plus-detail splits."
+      },
+      {
+        "name": "xl",
+        "value": "1280px",
+        "purpose": "Counseling board becomes a six-column grid."
+      }
+    ],
+    "focus": {
+      "value": "outline: 3px solid var(--act-bright); outline-offset: 2px",
+      "purpose": "Global :focus-visible ring on every interactive element."
+    },
+    "layout": {
+      "sideNav": "260px (from 1024px)",
+      "contentMax": "1320px",
+      "gutters": "16px / 24px from 640px / 32px from 1024px",
+      "mobileBottomPadding": "112px",
+      "gridGap": "20px"
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The card's single action. Saffron pill with a faint saffron pool; springs on press.",
+      "html": "<button class=\"ds-btn-primary\">Start quest</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border:0;border-radius:9999px;font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);font-weight:700;font-size:0.95rem;cursor:pointer;transition:transform 160ms cubic-bezier(0.3,1.22,0.6,1),box-shadow 200ms cubic-bezier(0.16,1,0.3,1),background-color 160ms ease;background:var(--act,#c2490b);color:var(--act-ink,#fff);box-shadow:0 6px 16px -8px var(--act,#c2490b)}.ds-btn-primary:hover{background:var(--act-hover,#a93e08)}.ds-btn-primary:focus-visible{outline:3px solid var(--act-bright,#f26b1d);outline-offset:2px}.ds-btn-primary:active{transform:scale(0.97)}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Dune pill for the companion action beside a primary (Edit) or low-stakes actions (Add).",
+      "html": "<button class=\"ds-btn-secondary\">Edit</button>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border:0;border-radius:9999px;font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);font-weight:700;font-size:0.95rem;cursor:pointer;transition:transform 160ms cubic-bezier(0.3,1.22,0.6,1),box-shadow 200ms cubic-bezier(0.16,1,0.3,1),background-color 160ms ease;background:var(--sand-2,#efe5d9);color:var(--ink,#2b2420)}.ds-btn-secondary:hover{background:var(--sand-3,#e6d9ca)}.ds-btn-secondary:focus-visible{outline:3px solid var(--act-bright,#f26b1d);outline-offset:2px}.ds-btn-secondary:active{transform:scale(0.97)}"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive choice (Reject): white pill, brick label, seam ring; never filled.",
+      "html": "<button class=\"ds-btn-danger\">Reject</button>",
+      "css": ".ds-btn-danger{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border:0;border-radius:9999px;font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);font-weight:700;font-size:0.95rem;cursor:pointer;transition:transform 160ms cubic-bezier(0.3,1.22,0.6,1),box-shadow 200ms cubic-bezier(0.16,1,0.3,1),background-color 160ms ease;background:var(--card,#fff);color:var(--crit,#a2312a);box-shadow:inset 0 0 0 1px var(--line,#eadfd3)}.ds-btn-danger:hover{background:var(--crit-bg,#fbe4e0)}.ds-btn-danger:focus-visible{outline:3px solid var(--act-bright,#f26b1d);outline-offset:2px}.ds-btn-danger:active{transform:scale(0.97)}"
+    },
+    {
+      "name": "Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Labelled text field: white, seam border, 14px radius, global saffron focus ring.",
+      "html": "<label class=\"ds-field\">Email<input type=\"email\" placeholder=\"you@college.edu\"></label>",
+      "css": ".ds-field{display:grid;gap:6px;font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);font-size:0.875rem;font-weight:700;color:var(--ink,#2b2420)}.ds-field input{height:44px;padding:0 14px;border:1px solid var(--line,#eadfd3);border-radius:14px;background:var(--card,#fff);color:var(--ink,#2b2420);font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);font-size:1rem;font-weight:400;caret-color:var(--act,#c2490b)}.ds-field input:focus-visible{outline:3px solid var(--act-bright,#f26b1d);outline-offset:2px}"
+    },
+    {
+      "name": "Gap Tags",
+      "kind": "chip",
+      "refersTo": "tag-low",
+      "description": "State pills: leaf, ochre, brick; always icon plus words.",
+      "html": "<div class=\"ds-tags\"><span class=\"ds-tag ds-tag-low\"><svg aria-hidden=\"true\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m9 12 2 2 4-4\"/></svg>Low gap</span><span class=\"ds-tag ds-tag-mod\"><svg aria-hidden=\"true\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/></svg>Moderate gap</span><span class=\"ds-tag ds-tag-crit\"><svg aria-hidden=\"true\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/></svg>Critical gap</span><span class=\"ds-tag\">14 days</span></div>",
+      "css": ".ds-tags{display:flex;flex-wrap:wrap;gap:8px}.ds-tag{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;padding:4px 10px;border-radius:9999px;font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);font-size:0.8rem;font-weight:700;line-height:1;background:var(--sand-2,#efe5d9);color:var(--ink-2,#6f6259)}.ds-tag-low{background:var(--low-bg,#e4f1e1);color:var(--low,#2f6b2c)}.ds-tag-mod{background:var(--mod-bg,#fbefd2);color:var(--mod,#8a5a00)}.ds-tag-crit{background:var(--crit-bg,#fbe4e0);color:var(--crit,#a2312a)}"
+    },
+    {
+      "name": "Evidence Chips",
+      "kind": "chip",
+      "refersTo": "",
+      "description": "The one verification vocabulary: icon names the state, colour reinforces it; no background.",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip ds-chip-low\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z\"/><path d=\"m9 12 2 2 4-4\"/></svg>Verified</span><span class=\"ds-chip\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 20h9\"/><path d=\"M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.85.5l-2.87.84.84-2.87a2 2 0 0 1 .5-.85z\"/></svg>Self-reported</span><span class=\"ds-chip ds-chip-crit\"><svg aria-hidden=\"true\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m4.9 4.9 14.2 14.2\"/></svg>Rejected</span></div>",
+      "css": ".ds-chips{display:flex;flex-wrap:wrap;gap:16px}.ds-chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);font-size:0.875rem;font-weight:700;color:var(--ink-2,#6f6259)}.ds-chip-low{color:var(--low,#2f6b2c)}.ds-chip-mod{color:var(--mod,#8a5a00)}.ds-chip-crit{color:var(--crit,#a2312a)}"
+    },
+    {
+      "name": "Score Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "One idea per card: caption, big tabular score, readiness bar with ink target tick, gap tag.",
+      "html": "<section class=\"ds-card\"><p class=\"ds-cap\">Corporate Placement · track score</p><p class=\"ds-score\">48.1</p><div class=\"ds-bar\" role=\"img\" aria-label=\"Score 48.1 of 100; target 70\"><span class=\"ds-bar-num\" style=\"left:70%\">70</span><div class=\"ds-bar-track\"><div class=\"ds-bar-fill\" style=\"width:48.1%\"></div><div class=\"ds-bar-tick\" style=\"left:70%\"></div></div></div><div class=\"ds-row\">Your target readiness is <strong>70</strong>. <span class=\"ds-tag ds-tag-mod\"><svg aria-hidden=\"true\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/></svg>Moderate gap</span></div></section>",
+      "css": ".ds-card{background:var(--card,#fff);color:var(--ink,#2b2420);border-radius:22px;padding:24px;box-shadow:0 1px 2px rgb(43 36 32 / 0.05),0 10px 28px -16px rgb(43 36 32 / 0.22);font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);max-width:420px}.ds-cap{margin:0;font-size:0.875rem;font-weight:700;color:var(--ink-2,#6f6259)}.ds-score{margin:4px 0 0;font-size:3.5rem;font-weight:900;line-height:1;letter-spacing:-0.025em;font-variant-numeric:tabular-nums}.ds-bar{position:relative;margin-top:28px}.ds-bar-num{position:absolute;top:-24px;transform:translateX(-50%);font-size:0.75rem;font-weight:800;font-variant-numeric:tabular-nums}.ds-bar-track{position:relative;height:12px;border-radius:9999px;background:var(--sand-2,#efe5d9)}.ds-bar-fill{position:absolute;inset:0 auto 0 0;border-radius:9999px;background:var(--ink-2,#6f6259);transition:width 500ms cubic-bezier(0.16,1,0.3,1)}.ds-bar-tick{position:absolute;top:-6px;width:4px;height:24px;transform:translateX(-50%);border-radius:9999px;background:var(--ink,#2b2420);box-shadow:0 0 0 2px var(--card,#fff);transition:left 500ms cubic-bezier(0.16,1,0.3,1)}.ds-row{margin-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;color:var(--ink-2,#6f6259)}.ds-row strong{color:var(--ink,#2b2420);font-variant-numeric:tabular-nums}.ds-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:9999px;font-size:0.8rem;font-weight:700;line-height:1}.ds-tag-mod{background:var(--mod-bg,#fbefd2);color:var(--mod,#8a5a00)}"
+    },
+    {
+      "name": "Side Nav",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Desktop side nav on sand: active item is a white pill with card shadow and a saffron icon.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main\"><a href=\"#\" class=\"ds-nav-item is-active\" aria-current=\"page\"><svg aria-hidden=\"true\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 21V7\"/><path d=\"m16 12 2 2 4-4\"/><path d=\"M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h6a1 1 0 0 0 1-1v-1.3\"/></svg>My passport</a><a href=\"#\" class=\"ds-nav-item\"><svg aria-hidden=\"true\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m3 17 2 2 4-4\"/><path d=\"m3 7 2 2 4-4\"/><path d=\"M13 6h8\"/><path d=\"M13 12h8\"/><path d=\"M13 18h8\"/></svg>Quests</a></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:6px;width:228px;padding:16px;background:var(--sand,#f6efe7);font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);}.ds-nav-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;font-weight:700;color:var(--ink-2,#6f6259);text-decoration:none;transition:transform 160ms cubic-bezier(0.3,1.22,0.6,1),box-shadow 200ms cubic-bezier(0.16,1,0.3,1),background-color 160ms ease;}.ds-nav-item:hover{background:var(--sand-2,#efe5d9);color:var(--ink,#2b2420)}.ds-nav-item.is-active{background:var(--card,#fff);color:var(--ink,#2b2420);box-shadow:0 1px 2px rgb(43 36 32 / 0.05),0 10px 28px -16px rgb(43 36 32 / 0.22)}.ds-nav-item.is-active svg{color:var(--act,#c2490b)}.ds-nav-item:focus-visible{outline:3px solid var(--act-bright,#f26b1d);outline-offset:2px}.ds-nav-item:active{transform:scale(0.97)}"
+    },
+    {
+      "name": "Switch",
+      "kind": "custom",
+      "refersTo": "switch-on",
+      "description": "Consent toggle: saffron when on, deep dune when off; knob glides on the expo curve.",
+      "html": "<button class=\"ds-switch\" role=\"switch\" aria-checked=\"true\" aria-label=\"Share with mentor\"><span></span></button>",
+      "css": ".ds-switch{position:relative;display:inline-flex;align-items:center;width:48px;height:28px;border:0;border-radius:9999px;background:var(--act,#c2490b);cursor:pointer;transition:transform 160ms cubic-bezier(0.3,1.22,0.6,1),box-shadow 200ms cubic-bezier(0.16,1,0.3,1),background-color 160ms ease;}.ds-switch[aria-checked=false]{background:var(--sand-3,#e6d9ca)}.ds-switch span{display:inline-block;width:20px;height:20px;border-radius:9999px;background:var(--card,#fff);box-shadow:0 1px 3px rgb(0 0 0 / 0.15);transform:translateX(24px);transition:transform 200ms cubic-bezier(0.16,1,0.3,1)}.ds-switch[aria-checked=false] span{transform:translateX(4px)}.ds-switch:focus-visible{outline:3px solid var(--act-bright,#f26b1d);outline-offset:2px}.ds-switch:active{transform:scale(0.97)}"
+    },
+    {
+      "name": "Empty State",
+      "kind": "custom",
+      "refersTo": "inset-panel",
+      "description": "Sand inset panel that teaches what will appear here.",
+      "html": "<div class=\"ds-empty\"><p class=\"ds-empty-t\">Your next step appears here</p><p class=\"ds-empty-b\">Your mentor proposes new steps after each evaluation.</p></div>",
+      "css": ".ds-empty{background:var(--sand,#f6efe7);border-radius:16px;padding:24px 20px;text-align:center;font-family:var(--font-sans, 'Nunito Sans', ui-sans-serif, system-ui, sans-serif);color:var(--ink,#2b2420);max-width:420px}.ds-empty-t{margin:0;font-weight:800}.ds-empty-b{margin:4px auto 0;max-width:46ch;font-size:0.875rem;color:var(--ink-2,#6f6259)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Thumb-Known App",
+    "overview": "AspirEdge reads like an app students already know by thumb: a warm sand ground, white cards with generous rounded corners, cocoa ink, and plain words. Each card carries one idea (where you stand, the next step, your evidence, who sees your data) so the student reads a screen in seconds and the mentor works a queue without hunting. Density is comfortable rather than compact; whitespace and card edges do the grouping, not rules and boxes.\n\nSaffron is the one saturated colour in the system and it appears only where something can be pressed: primary buttons, links, the active bottom-bar item, switches that are on, and the focus ring. Every judgement the product makes (gap level, verification state, trend) is carried by leaf, ochre and brick labels that always pair an icon with words, so meaning never rests on colour alone. Numbers are set in heavy tabular figures and every one of them sits next to its evidence.\n\nThe system rejects the grey KPI-tile analytics dashboard and the neon \"AI\" console. There is no gradient text, no glass, no glow beyond the soft lift under the primary button, and no small all-caps kicker above headings.",
+    "keyCharacteristics": [
+      "Warm sand ground, white cards (22px corners) with soft, low-offset shadows.",
+      "One saturated colour, saffron, reserved for actions.",
+      "Leaf / ochre / brick state labels, always icon plus text.",
+      "Nunito Sans throughout, heavy weights for headings and scores, tabular figures for data.",
+      "Pill-shaped buttons and tags; a soft spring on press.",
+      "Light theme first, with a matched dark theme that follows the system setting."
+    ],
+    "rules": [
+      {
+        "name": "The Saffron Means Press Rule",
+        "body": "Saffron marks actions alone: buttons, links, the active nav indicator, an on switch, focus. A score, a gap, a chart series or a heading is never saffron. The brand-mark dot is the only non-action use.",
+        "section": "colors"
+      },
+      {
+        "name": "The Words-and-Icon Rule",
+        "body": "Every state is text plus icon plus colour. A leaf, ochre or brick hue without its label and icon is a defect.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tokens-in-One-Place Rule",
+        "body": "Colour values live only in `src/app/globals.css` as custom properties and are used through their utilities or `var()`. Components never carry inline hex. (The browser `themeColor` metadata, which cannot read CSS variables, is the one mirror of `sand`.)",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Numbers Rule",
+        "body": "Every score, weight, count and date in data uses tabular figures (`.tabular`) so columns and live-changing values never jitter.",
+        "section": "typography"
+      },
+      {
+        "name": "The No Kicker Rule",
+        "body": "Headings stand alone. No small uppercase or tracked label sits above a heading; context goes in the heading itself (\"Next: ...\") or in the hint below it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Inside Rule",
+        "body": "Only cards cast shadows. Anything inside a card separates by tone (sand panel), a hairline, or spacing, never by a second shadow or a nested card.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep saffron (#c2490b) for things that can be pressed: buttons, links, the active nav indicator, on switches, focus.",
+      "Do pair every state colour with an icon and words, using the GapTag, TrendTag and EvidenceChip vocabularies as built.",
+      "Do give each card one idea, a 1.05rem extrabold title and at most one primary button.",
+      "Do set scores and data in tabular figures, with the big score at 900 weight.",
+      "Do separate content inside a card with sand inset panels (16px radius), hairline seams or spacing.",
+      "Do use the pill shape for buttons and tags, 22px for cards, 14px for fields.",
+      "Do add new colours, radii, shadows or easings as tokens in `src/app/globals.css`, with a dark-theme value alongside.",
+      "Do check every new screen in one column at phone width with the bottom bar in place."
+    ],
+    "donts": [
+      "Don't use saffron for a score, a gap level, a chart series, a heading or a decorative accent.",
+      "Don't convey a state by colour alone.",
+      "Don't nest a card inside a card or put a shadow on anything inside a card.",
+      "Don't put an uppercase or tracked eyebrow/kicker label above a heading.",
+      "Don't use gradient text, glassmorphism or backdrop blur.",
+      "Don't write inline hex or rgb values in components.",
+      "Don't build grey KPI-tile dashboards or neon \"AI console\" styling.",
+      "Don't add a second typeface."
+    ]
+  }
+}

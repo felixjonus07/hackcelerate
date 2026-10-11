@@ -1,0 +1,335 @@
+{
+  "policy_version": "2026.10-v1",
+  "status": "DRAFT",
+  "status_note": "DRAFT, pending registrar approval. Values are the proposed defaults from the Deep Platform Plan v2.0 and must be replaced with the institution's own (§3.1, §21).",
+  "effective_from": "2026-10-11",
+  "academic": {
+    "cgpa_scale_max": 10,
+    "eligibility_cgpa_above": 5.0,
+    "scoring_range": [5.0, 10.0]
+  },
+  "attendance": {
+    "requirement_pct": 75,
+    "condonation_floor_pct": 65,
+    "watch_band_pct": [65, 74]
+  },
+  "readiness_default": 70,
+  "aeg_bands": { "moderate_from": 0.15, "critical_from": 0.35 },
+  "personas": {
+    "false_positive_high_flyer": {
+      "cgpa_min": 8.8,
+      "aptitude_below_pct": 55,
+      "verified_projects_min": 0,
+      "floor": "MODERATE"
+    },
+    "detention_threat_builder": {
+      "attendance_below_pct": 65,
+      "artifact_score_percentile_min": 75,
+      "floor": "CRITICAL"
+    },
+    "aspiration_mismatch": {
+      "abroad": { "backlogs_min": 3, "deadline_within_months": 12 },
+      "public_service": { "mocks_last_60d_max": 0, "exam_within_months": 12 },
+      "floor": "MODERATE"
+    },
+    "drifting_student": {
+      "min_year": 3,
+      "cgpa_avg_max": 6.5,
+      "activity_last_60d_max": 0,
+      "floor": "MODERATE"
+    }
+  },
+  "persona_precedence": [
+    "detention_threat_builder",
+    "aspiration_mismatch",
+    "false_positive_high_flyer",
+    "drifting_student"
+  ],
+  "trend": {
+    "window_weeks": 4,
+    "min_observations": 3,
+    "attendance": { "worsening_slope_max": -2, "improving_slope_min": 2 },
+    "mock_percentile": { "worsening_slope_max": -3, "improving_slope_min": 3 },
+    "streak_gap_note_days": 5,
+    "streak_window_days": 14
+  },
+  "pivot": { "score_advantage_min": 10, "min_gap_index": "MODERATE" },
+  "streak": {
+    "target_days": 30,
+    "min_items_per_credit": 15,
+    "daily_credit_cap": 1
+  },
+  "integrity": {
+    "min_seconds_per_mcq": 5,
+    "min_seconds_per_numerical": 15,
+    "burst_commits_per_minute": 25,
+    "burst_share_24h": 0.8
+  },
+  "verification_multipliers": {
+    "VERIFIED": 1.0,
+    "ATTESTED": 0.9,
+    "LIVE_UNVERIFIED": 0.6,
+    "SELF_REPORTED": 0.5,
+    "UNVERIFIED": 0.0,
+    "REJECTED": 0.0,
+    "STALE": 0.0,
+    "SUBMITTED": 0.0,
+    "UNDER_CHECK": 0.0
+  },
+  "confidence": { "medium_max_gaps": 2, "source_failure_window_days": 7 },
+  "llm": {
+    "free_text_max_chars": 1000,
+    "target_days_range": [7, 90],
+    "max_action_steps": 3
+  },
+  "leaderboard": { "default_opt_in": false },
+  "tracks": {
+    "corporate_placement": {
+      "name": "Corporate Placement",
+      "rubric_version": "cp-1",
+      "components": {
+        "academic_baseline": 15,
+        "aptitude": 25,
+        "domain_practical_evidence": 30,
+        "mock_interview_readiness": 15,
+        "verified_experience": 15
+      },
+      "params": { "internship_hours_full": 120, "mock_interview_window": 3 },
+      "gate": "at_least_one_department_standard_item"
+    },
+    "higher_studies": {
+      "name": "Higher Studies and Research",
+      "assumed": true,
+      "rubric_version": "hs-1",
+      "components": {
+        "academic_baseline": 25,
+        "entrance_exam_readiness": 25,
+        "research_output": 30,
+        "faculty_recommendation_readiness": 10,
+        "application_timeline_adherence": 10
+      },
+      "params": { "sop_reviews_full": 3 },
+      "gate": null
+    },
+    "entrepreneurship": {
+      "name": "Entrepreneurship and Startups",
+      "assumed": true,
+      "rubric_version": "en-1",
+      "components": {
+        "venture_traction": 30,
+        "build_evidence": 20,
+        "customer_validation": 20,
+        "team_and_execution": 15,
+        "academic_continuity": 15
+      },
+      "params": { "customer_interviews_full": 15 },
+      "gate": null
+    },
+    "public_service": {
+      "name": "Public Service and Government Exams",
+      "rubric_version": "ps-1",
+      "components": {
+        "current_affairs_consistency": 25,
+        "general_studies_mock": 30,
+        "quantitative_speed": 20,
+        "mock_streak": 15,
+        "answer_writing": 10
+      },
+      "params": { "gs_mock_window": 3, "current_affairs_window_days": 30 },
+      "gate": "cgpa_above_eligibility_floor"
+    },
+    "freelance_creator": {
+      "name": "Freelance and Creator Economy",
+      "rubric_version": "fc-1",
+      "components": {
+        "live_portfolio": 25,
+        "client_work": 30,
+        "tool_certifications": 15,
+        "live_deployments": 20,
+        "open_source_community": 10
+      },
+      "params": {},
+      "gate": "attendance_at_or_above_requirement"
+    },
+    "sports_defense_ncc": {
+      "name": "Sports, Defense and NCC",
+      "rubric_version": "sd-1",
+      "components": {
+        "physical_fitness": 30,
+        "camp_training_attendance": 20,
+        "competition_results": 25,
+        "psychometric_readiness": 25
+      },
+      "params": {
+        "competition_points": { "university": 1, "state": 2, "national": 3 }
+      },
+      "gate": "minimum_credits_held"
+    }
+  },
+  "department_standards": {
+    "MECH": {
+      "name": "Mechanical",
+      "items": {
+        "solidworks_lab": { "label": "SolidWorks lab completion", "weight": 2 },
+        "autocad_lab": { "label": "AutoCAD lab", "weight": 1 },
+        "gdt_assessment": { "label": "Timed GD&T assessment", "weight": 3 },
+        "factory_internship_hours": {
+          "label": "Factory internship hours",
+          "weight": 3
+        }
+      }
+    },
+    "COMM": {
+      "name": "Commerce and Finance",
+      "items": {
+        "excel_financial_model": {
+          "label": "Advanced Excel financial model",
+          "weight": 3
+        },
+        "tally_erp": { "label": "Tally ERP proficiency", "weight": 2 },
+        "taxation_knowledge": {
+          "label": "Statutory taxation knowledge",
+          "weight": 3
+        }
+      }
+    },
+    "BIOT": {
+      "name": "Biotechnology",
+      "items": {
+        "wet_lab_hours": { "label": "Wet-lab hours", "weight": 2 },
+        "clinical_data_module": {
+          "label": "Clinical data management module",
+          "weight": 2
+        },
+        "gcp_awareness": {
+          "label": "Good Clinical Practice awareness",
+          "weight": 3
+        }
+      }
+    },
+    "LAW": {
+      "name": "Law",
+      "items": {
+        "moot_court_citations": {
+          "label": "Moot court citations",
+          "weight": 3
+        },
+        "drafting_standards": { "label": "Drafting standards", "weight": 3 },
+        "contract_case_preparation": {
+          "label": "Contract case preparation",
+          "weight": 2
+        }
+      }
+    },
+    "CSE": {
+      "name": "Computer Science and IT",
+      "items": {
+        "practice_problem_sets": {
+          "label": "Practice problem sets",
+          "weight": 2
+        },
+        "deployed_projects": { "label": "Deployed projects", "weight": 3 },
+        "systems_design_notes": { "label": "Systems design notes", "weight": 2 }
+      }
+    },
+    "EEE": {
+      "name": "Electronics and Electrical",
+      "items": {
+        "circuit_pcb_project": {
+          "label": "Circuit or PCB project",
+          "weight": 3
+        },
+        "embedded_lab_hours": { "label": "Embedded lab hours", "weight": 2 },
+        "signal_power_test": {
+          "label": "Signal and power technical test",
+          "weight": 3
+        }
+      }
+    },
+    "CIVIL": {
+      "name": "Civil",
+      "items": {
+        "autocad_staad_model": {
+          "label": "AutoCAD or STAAD model completion",
+          "weight": 3
+        },
+        "site_visit_log": { "label": "Site visit log", "weight": 2 },
+        "estimation_test": { "label": "Estimation test", "weight": 3 }
+      }
+    }
+  },
+  "routes": {
+    "detention_threat_builder": {
+      "label": "Attendance support",
+      "recipient_role": "class_advisor",
+      "approver_role": "class_advisor",
+      "copy_roles": ["ecell_coordinator"],
+      "sla_working_days": 2,
+      "escalate_to": "dean",
+      "escalate_after_working_days": 5,
+      "closure": "Attendance above the floor for three consecutive weeks, or a condonation decision recorded"
+    },
+    "aspiration_mismatch": {
+      "label": "Timeline review",
+      "recipient_role": "faculty_mentor",
+      "approver_role": "faculty_mentor",
+      "copy_roles": [],
+      "sla_working_days": 5,
+      "escalate_to": "hod",
+      "escalate_after_working_days": null,
+      "closure": "Student records a decision to continue, pivot, or extend the target date"
+    },
+    "false_positive_high_flyer": {
+      "label": "Aptitude and project plan",
+      "recipient_role": "placement_officer",
+      "approver_role": "placement_officer",
+      "copy_roles": [],
+      "sla_working_days": 5,
+      "escalate_to": "faculty_mentor",
+      "escalate_after_working_days": 14,
+      "closure": "Aptitude score and one verified project recorded, or student declines with a reason"
+    },
+    "drifting_student": {
+      "label": "Mapping conversation",
+      "recipient_role": "faculty_mentor",
+      "approver_role": "faculty_mentor",
+      "copy_roles": [],
+      "sla_working_days": 7,
+      "escalate_to": "hod",
+      "escalate_after_working_days": 21,
+      "closure": "Track declared and first meeting logged"
+    },
+    "attendance_critical": {
+      "label": "Attendance critical",
+      "recipient_role": "class_advisor",
+      "approver_role": "class_advisor",
+      "copy_roles": [],
+      "sla_working_days": 2,
+      "escalate_to": "dean",
+      "escalate_after_working_days": 5,
+      "closure": "Attendance above the floor for three consecutive weeks, or a condonation decision recorded"
+    },
+    "integrity_flag": {
+      "label": "Evidence review",
+      "recipient_role": "faculty_mentor",
+      "approver_role": "faculty_mentor",
+      "copy_roles": [],
+      "sla_working_days": 3,
+      "escalate_to": "program_coordinator",
+      "escalate_after_working_days": 3,
+      "closure": "Flag resolved with a stated reason"
+    }
+  },
+  "counseling": {
+    "columns": ["REFERRED", "SCHEDULED", "IN_CONVERSATION", "PLAN_ACTIVE", "FOLLOW_UP_DUE", "CLOSED"],
+    "wip_limit_per_mentor": 25,
+    "inactivity_amber_days": 14
+  },
+  "wellbeing": {
+    "late_night_sessions_nights": 5,
+    "late_night_window_days": 14,
+    "mock_volume_spike_pct": 100,
+    "attendance_drop_points": 10,
+    "activity_stop_days": 14
+  }
+}
