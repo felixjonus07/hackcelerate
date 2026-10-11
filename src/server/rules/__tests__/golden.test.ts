@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { loadPolicyFile } from "../../policy/load";
+import { addWorkingDays, toDateKey } from "../../services/time";
 import { evaluate, gapIndex, gapRatio, levelRank, round1, round2, scoreTrack, whatIf } from "..";
 import { CS_44, EE_12, ME_27, SEED_RECORDS } from "../fixtures";
 
@@ -109,12 +110,113 @@ describe("§20.4 Example C — EE-12 False-Positive High Flyer", () => {
   });
 });
 
-describe("Appendix D seed records", () => {
-  for (const r of SEED_RECORDS) {
-    it(`${r.facts.studentId} → ${r.expectedPersona ?? "no persona"}`, () => {
+describe("Appendix D seed records (§20, Appendix D)", () => {
+  const byId = Object.fromEntries(SEED_RECORDS.map((r) => [r.facts.studentId, r]));
+
+  it("SYN-01: False-Positive High Flyer with 5-working-day placement officer route", () => {
+    const syn01 = byId["SYN-01"];
+    const e = evaluate(syn01.facts, policy);
+    expect(e.primaryPersona).toBe("false_positive_high_flyer");
+    expect(e.aegIndex).toBe("MODERATE");
+    expect(levelRank(e.aegIndex)).toBeGreaterThanOrEqual(levelRank("MODERATE"));
+    expect(e.routes[0]).toMatchObject({
+      routeKey: "false_positive_high_flyer",
+      recipientRole: "placement_officer",
+      slaWorkingDays: 5,
+    });
+
+    // Friday Oct 9, 2026 + 5 working days -> Friday Oct 16, 2026
+    const evalDate = new Date(2026, 9, 9);
+    const due = addWorkingDays(evalDate, e.routes[0].slaWorkingDays, policy.calendar.holidays);
+    expect(toDateKey(due)).toBe("2026-10-16");
+  });
+
+  it("SYN-02: Balanced commerce student has no persona and healthy index", () => {
+    const syn02 = byId["SYN-02"];
+    const e = evaluate(syn02.facts, policy);
+    expect(e.primaryPersona).toBeNull();
+    expect(e.personas).toHaveLength(0);
+    expect(e.aegIndex).toBe("LOW");
+    expect(e.routes).toHaveLength(0);
+  });
+
+  it("SYN-03: Detention Threat Builder with 2-working-day SLA and E-Cell copy", () => {
+    const syn03 = byId["SYN-03"];
+    const e = evaluate(syn03.facts, policy);
+    expect(e.primaryPersona).toBe("detention_threat_builder");
+    expect(e.aegIndex).toBe("CRITICAL");
+    expect(e.trend.overall).toBe("WORSENING");
+    expect(e.routes[0]).toMatchObject({
+      routeKey: "detention_threat_builder",
+      recipientRole: "class_advisor",
+      slaWorkingDays: 2,
+      copyRoles: ["ecell_coordinator"],
+    });
+
+    // Friday Oct 9, 2026 + 2 working days -> Tuesday Oct 13, 2026
+    const evalDate = new Date(2026, 9, 9);
+    const due = addWorkingDays(evalDate, e.routes[0].slaWorkingDays, policy.calendar.holidays);
+    expect(toDateKey(due)).toBe("2026-10-13");
+  });
+
+  it("SYN-04: Biotech student without emergency flags", () => {
+    const syn04 = byId["SYN-04"];
+    const e = evaluate(syn04.facts, policy);
+    expect(e.primaryPersona).toBeNull();
+    expect(e.personas).toHaveLength(0);
+    expect(e.routes).toHaveLength(0);
+  });
+
+  it("SYN-05: Aspiration Mismatch (abroad with backlogs) routed to mentor within 5 working days", () => {
+    const syn05 = byId["SYN-05"];
+    const e = evaluate(syn05.facts, policy);
+    expect(e.primaryPersona).toBe("aspiration_mismatch");
+    expect(levelRank(e.aegIndex)).toBeGreaterThanOrEqual(levelRank("MODERATE"));
+    expect(e.routes[0]).toMatchObject({
+      routeKey: "aspiration_mismatch",
+      recipientRole: "faculty_mentor",
+      slaWorkingDays: 5,
+    });
+  });
+
+  it("SYN-06: Drifting Student (year 3 undeclared) routed to mentor within 7 working days", () => {
+    const syn06 = byId["SYN-06"];
+    const e = evaluate(syn06.facts, policy);
+    expect(e.primaryPersona).toBe("drifting_student");
+    expect(levelRank(e.aegIndex)).toBeGreaterThanOrEqual(levelRank("MODERATE"));
+    expect(e.routes[0]).toMatchObject({
+      routeKey: "drifting_student",
+      recipientRole: "faculty_mentor",
+      slaWorkingDays: 7,
+    });
+
+    // Friday Oct 9, 2026 + 7 working days with Oct 20 holiday (2026.10-v1):
+    // Week 1: Oct 12, 13, 14, 15, 16 (5 days)
+    // Week 2: Oct 19 (day 6), Oct 20 (holiday skipped!), Oct 21 (day 7) -> Oct 21, 2026
+    const evalDate = new Date(2026, 9, 9);
+    const due = addWorkingDays(evalDate, e.routes[0].slaWorkingDays, policy.calendar.holidays);
+    expect(toDateKey(due)).toBe("2026-10-21");
+  });
+
+  it("SYN-07: Aspiration Mismatch (public service zero mocks) routed to mentor within 5 working days", () => {
+    const syn07 = byId["SYN-07"];
+    const e = evaluate(syn07.facts, policy);
+    expect(e.primaryPersona).toBe("aspiration_mismatch");
+    expect(levelRank(e.aegIndex)).toBeGreaterThanOrEqual(levelRank("MODERATE"));
+    expect(e.routes[0]).toMatchObject({
+      routeKey: "aspiration_mismatch",
+      recipientRole: "faculty_mentor",
+      slaWorkingDays: 5,
+    });
+  });
+
+  it("all seed records satisfy their expected persona and floor bounds", () => {
+    for (const r of SEED_RECORDS) {
       const e = evaluate(r.facts, policy);
       expect(e.primaryPersona).toBe(r.expectedPersona);
-      if (r.expectedFloor) expect(levelRank(e.aegIndex)).toBeGreaterThanOrEqual(levelRank(r.expectedFloor));
-    });
-  }
+      if (r.expectedFloor) {
+        expect(levelRank(e.aegIndex)).toBeGreaterThanOrEqual(levelRank(r.expectedFloor));
+      }
+    }
+  });
 });

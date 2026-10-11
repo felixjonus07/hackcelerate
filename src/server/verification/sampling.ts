@@ -5,7 +5,7 @@
  * Sampling decisions are recorded for auditability and are idempotent —
  * re-running the sampler for the same term does not change existing decisions.
  */
-import { createHash, randomInt } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { Policy } from "../policy/schema";
 
 /* ────────────────── Types ────────────────── */
