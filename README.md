@@ -210,6 +210,7 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
 - Fixed `process.exit(1)` → `process.exit(0)` in the "no changed files" and "all skippable" branches.
 - Updated header comment block to correctly document the Vercel convention.
 - Verified locally: no-SHA branch exits 1 (BUILD ✅), app-file change exits 1 (BUILD ✅), docs-only change exits 0 (SKIP ✅).
+- Moved `@tailwindcss/turbopack` and `tailwindcss` from `devDependencies` to `dependencies` in `package.json` so Turbopack can find them during Vercel's `NODE_ENV=production` build step (`npm ci`).
 
 ## Roadmap (post-freeze ideas go here)
 
