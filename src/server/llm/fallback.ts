@@ -36,7 +36,7 @@ export function templatedNarrative(input: FactsInput, policy: Policy): Narrative
       `Your ${trackName} score is ${round1(t.score)} against a readiness level of ${e.readiness} [ev:score] [ev:readiness]. ` +
       `That places you ${GAP_PHRASE[e.aegIndex]} [ev:gap].` +
       (t.dataGaps.length
-        ? ` ${t.dataGaps.length === 1 ? "One item is" : `${t.dataGaps.length} items are`} not yet evidenced [ev:gap:1].`
+        ? ` ${t.dataGaps.length === 1 ? "One item is" : "Multiple items are"} not yet evidenced [ev:gap:1].`
         : ""),
     department_context_analysis: weakest
       .map((c) => `${c.label} currently scores ${round1(c.score)} with weight ${c.weight} [ev:comp:${c.key}].`)
@@ -54,8 +54,8 @@ export function templatedNarrative(input: FactsInput, policy: Policy): Narrative
         ],
     career_pivot_advisory: {
       reasoning: e.pivot.recommended
-        ? `${e.pivot.reasons.map((r, i) => `${r} [ev:pivot:${i + 1}].`).join(" ")} You choose whether to change track.`
-        : `No change of track is suggested at this point [ev:gap].`,
+        ? `${e.pivot.reasons.map((r, i) => `${r} [ev:pivot:${i + 1}].`).join(" ")} You choose whether to change track [ev:gap].`
+        : "No change of track is suggested at this point [ev:gap].",
     },
   };
 }

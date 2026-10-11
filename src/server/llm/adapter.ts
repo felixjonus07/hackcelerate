@@ -37,6 +37,9 @@ export async function callModel(
       messages,
       response_format: { type: "json_object" },
       max_tokens: 1600,
+      provider: {
+        data_collection: "deny",
+      },
     }),
     signal: opts.signal ?? AbortSignal.timeout(30_000),
   });

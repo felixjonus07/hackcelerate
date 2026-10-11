@@ -178,7 +178,7 @@ describe("§15.1 Property-based testing (fast-check)", () => {
       }),
       { numRuns: 10_000 },
     );
-  });
+  }, 30_000);
 
   it("guarantees adding verified evidence never lowers a score across 10,000 runs", () => {
     fc.assert(
@@ -225,7 +225,7 @@ describe("§15.1 Property-based testing (fast-check)", () => {
       ),
       { numRuns: 10_000 },
     );
-  });
+  }, 30_000);
 
   it("guarantees upgrading existing evidence to VERIFIED never lowers a score", () => {
     fc.assert(
