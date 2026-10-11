@@ -10,6 +10,7 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_URL: z.url().default("http://localhost:3100"),
   DATABASE_URL: z.string().default("postgres://aspiredge:aspiredge@localhost:5434/aspiredge"),
+  DIRECT_URL: z.string().optional(),
   REDIS_URL: z.string().default("redis://localhost:6380"),
   BETTER_AUTH_SECRET: z.string().min(32).default("dev-only-secret-change-me-0000000000000000"),
   BETTER_AUTH_URL: z.url().default("http://localhost:3100"),
