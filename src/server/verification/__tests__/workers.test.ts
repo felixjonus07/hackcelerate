@@ -3,17 +3,17 @@
  * Uses unit-level tests without real external API calls.
  */
 import { describe, expect, it } from "vitest";
-import { normalizeDoi, nameMatchScore } from "../crossref";
+import {
+  ALLOWED_MIME_TYPES,
+  generateObjectKey,
+  MAX_FILE_SIZE,
+  MAX_SIGNED_URL_SECONDS,
+  validateUpload,
+} from "../../storage";
+import { nameMatchScore, normalizeDoi } from "../crossref";
 import { parseGitHubUrl } from "../github";
 import { validateUrl } from "../link";
-import { selectSample, validateSamplingDistribution, type SamplingCandidate } from "../sampling";
-import {
-  validateUpload,
-  generateObjectKey,
-  MAX_SIGNED_URL_SECONDS,
-  ALLOWED_MIME_TYPES,
-  MAX_FILE_SIZE,
-} from "../../storage";
+import { type SamplingCandidate, selectSample, validateSamplingDistribution } from "../sampling";
 
 /* ────────────────── DOI Normalization ────────────────── */
 

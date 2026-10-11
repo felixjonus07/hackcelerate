@@ -63,9 +63,7 @@ function getChangedFiles() {
 const changed = getChangedFiles();
 console.log(`Changed files (${changed.length}):\n${changed.join("\n")}`);
 
-const allSkippable = changed.every((file) =>
-  SKIP_PATTERNS.some((pattern) => pattern.test(file))
-);
+const allSkippable = changed.every((file) => SKIP_PATTERNS.some((pattern) => pattern.test(file)));
 
 if (allSkippable) {
   console.log("All changes are in non-app files — skipping build. ✓");

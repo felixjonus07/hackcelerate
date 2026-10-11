@@ -8,12 +8,12 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { artifactStatusEvents, artifacts } from "../db/schema";
-import { students, studentIdentities } from "../db/schema/people";
-import type { VerificationStatus } from "../policy/schema";
+import { studentIdentities, students } from "../db/schema/people";
 import { logger } from "../logger";
+import type { VerificationStatus } from "../policy/schema";
 import { verifyCrossref } from "./crossref";
 import { verifyGitHub } from "./github";
-import { transitionArtifact, getRealDeps, LifecycleError } from "./lifecycle";
+import { getRealDeps, LifecycleError, transitionArtifact } from "./lifecycle";
 import { checkLink } from "./link";
 
 /* ────────────────── Types ────────────────── */
@@ -74,11 +74,7 @@ export async function verifyArtifact(
   attempt = 1,
 ): Promise<VerificationOutcome> {
   // 1. Load artifact
-  const [a] = await db
-    .select()
-    .from(artifacts)
-    .where(eq(artifacts.id, artifactId))
-    .limit(1);
+  const [a] = await db.select().from(artifacts).where(eq(artifacts.id, artifactId)).limit(1);
 
   if (!a) {
     return {

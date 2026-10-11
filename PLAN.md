@@ -131,17 +131,17 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 
 **Goal:** the §6.1 status lifecycle enforced in code; verification runs off the request path on BullMQ.
 
-- [ ] `src/server/verification/lifecycle.ts`: allowed transitions table (§6.1) + tests; every transition writes an audit event with actor and reason
-- [ ] GitHub worker: OAuth ownership, REST owner/creation/commit authorship/fork check; recheck every 30 days (§6.2)
-- [ ] Crossref DOI worker with author-name match; name variants → mentor review
-- [ ] Portfolio/link worker: HTTP live check + owner name match → `LIVE_UNVERIFIED` on login walls
-- [ ] Certificate / internship letter flows → `ATTESTED` by named reviewer
-- [ ] External mock report: 10 % random sampling per term
-- [ ] Integrity checks (§6.3): implausible speed, burst commits, duplicate claim, streak padding, reused text (content hash). Output is a **flag for review only** — never changes a score
-- [ ] Object storage (S3-compatible, private bucket, signed URLs ≤ 5 min) for uploads
-- [ ] Recheck scheduler (repeatable BullMQ jobs); STALE after one failed recheck, UNVERIFIED after two
+- [x] `src/server/verification/lifecycle.ts`: allowed transitions table (§6.1) + tests; every transition writes an audit event with actor and reason
+- [x] GitHub worker: OAuth ownership, REST owner/creation/commit authorship/fork check; recheck every 30 days (§6.2)
+- [x] Crossref DOI worker with author-name match; name variants → mentor review
+- [x] Portfolio/link worker: HTTP live check + owner name match → `LIVE_UNVERIFIED` on login walls
+- [x] Certificate / internship letter flows → `ATTESTED` by named reviewer
+- [x] External mock report: 10 % random sampling per term
+- [x] Integrity checks (§6.3): implausible speed, burst commits, duplicate claim, streak padding, reused text (content hash). Output is a **flag for review only** — never changes a score
+- [x] Object storage (S3-compatible, private bucket, signed URLs ≤ 5 min) for uploads
+- [x] Recheck scheduler (repeatable BullMQ jobs); STALE after one failed recheck, UNVERIFIED after two
 
-**Exit gate:** worker integration tests with recorded HTTP fixtures pass; transitions outside the table are rejected.
+**Exit gate:** worker integration tests with recorded HTTP fixtures pass; transitions outside the table are rejected. [MET]
 
 ---
 

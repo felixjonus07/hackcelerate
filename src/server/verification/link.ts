@@ -181,10 +181,7 @@ const MAX_REDIRECTS = 5;
  * - Detects login walls → LIVE_UNVERIFIED
  * - Checks owner name on accessible pages
  */
-export async function checkLink(
-  url: string,
-  ownerName?: string,
-): Promise<LinkVerificationResult> {
+export async function checkLink(url: string, ownerName?: string): Promise<LinkVerificationResult> {
   // 1. SSRF validation
   const validation = validateUrl(url);
   if (!validation.safe) {

@@ -4,6 +4,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  type BurstCommitInput,
+  type ClaimInput,
   checkBurstCommits,
   checkDuplicateClaims,
   checkImplausibleSpeed,
@@ -11,8 +13,6 @@ import {
   checkStreakPadding,
   contentHash,
   type MockAttemptInput,
-  type BurstCommitInput,
-  type ClaimInput,
   type StreakMockInput,
   type TextEvidenceInput,
 } from "../integrity";
@@ -108,7 +108,10 @@ describe("§6.3 Burst commits", () => {
   it("handles empty or single commit gracefully", () => {
     expect(checkBurstCommits({ artifactId: "a4", studentId: "s1", commits: [] }, POLICY)).toHaveLength(0);
     expect(
-      checkBurstCommits({ artifactId: "a5", studentId: "s1", commits: [{ timestamp: "2026-10-01T10:00:00Z" }] }, POLICY),
+      checkBurstCommits(
+        { artifactId: "a5", studentId: "s1", commits: [{ timestamp: "2026-10-01T10:00:00Z" }] },
+        POLICY,
+      ),
     ).toHaveLength(0);
   });
 });
@@ -156,18 +159,14 @@ describe("§6.3 Duplicate claims", () => {
 
 describe("§6.3 Streak padding", () => {
   it("denies credit for day with no qualifying mock", () => {
-    const mocks: StreakMockInput[] = [
-      { mockId: "m1", studentId: "s1", items: 5, takenAt: "2026-10-10T10:00:00Z" },
-    ];
+    const mocks: StreakMockInput[] = [{ mockId: "m1", studentId: "s1", items: 5, takenAt: "2026-10-10T10:00:00Z" }];
     const denied = checkStreakPadding(mocks, POLICY);
     expect(denied).toHaveLength(1);
     expect(denied[0].date).toBe("2026-10-10");
   });
 
   it("allows credit for day with ≥15 items", () => {
-    const mocks: StreakMockInput[] = [
-      { mockId: "m1", studentId: "s1", items: 15, takenAt: "2026-10-10T10:00:00Z" },
-    ];
+    const mocks: StreakMockInput[] = [{ mockId: "m1", studentId: "s1", items: 15, takenAt: "2026-10-10T10:00:00Z" }];
     const denied = checkStreakPadding(mocks, POLICY);
     expect(denied).toHaveLength(0);
   });
@@ -185,8 +184,16 @@ describe("§6.3 Streak padding", () => {
 describe("§6.3 Reused text", () => {
   it("flags identical text across two students", () => {
     const evidence: TextEvidenceInput[] = [
-      { artifactId: "a1", studentId: "s1", text: "This is my project description that is long enough to be meaningful for comparison purposes" },
-      { artifactId: "a2", studentId: "s2", text: "This is my project description that is long enough to be meaningful for comparison purposes" },
+      {
+        artifactId: "a1",
+        studentId: "s1",
+        text: "This is my project description that is long enough to be meaningful for comparison purposes",
+      },
+      {
+        artifactId: "a2",
+        studentId: "s2",
+        text: "This is my project description that is long enough to be meaningful for comparison purposes",
+      },
     ];
     const flags = checkReusedText(evidence);
     expect(flags).toHaveLength(2);
@@ -196,8 +203,16 @@ describe("§6.3 Reused text", () => {
 
   it("does not flag same student's text", () => {
     const evidence: TextEvidenceInput[] = [
-      { artifactId: "a1", studentId: "s1", text: "This is my project description that is long enough to be meaningful for comparison purposes" },
-      { artifactId: "a2", studentId: "s1", text: "This is my project description that is long enough to be meaningful for comparison purposes" },
+      {
+        artifactId: "a1",
+        studentId: "s1",
+        text: "This is my project description that is long enough to be meaningful for comparison purposes",
+      },
+      {
+        artifactId: "a2",
+        studentId: "s1",
+        text: "This is my project description that is long enough to be meaningful for comparison purposes",
+      },
     ];
     const flags = checkReusedText(evidence);
     expect(flags).toHaveLength(0);
@@ -213,7 +228,8 @@ describe("§6.3 Reused text", () => {
   });
 
   it("normalizes whitespace before hashing", () => {
-    const text1 = "This is a long enough text\r\nwith  different    whitespace   that is meaningful for hashing purposes";
+    const text1 =
+      "This is a long enough text\r\nwith  different    whitespace   that is meaningful for hashing purposes";
     const text2 = "This is a long enough text\nwith different whitespace that is meaningful for hashing purposes";
     expect(contentHash(text1)).toBe(contentHash(text2));
   });
