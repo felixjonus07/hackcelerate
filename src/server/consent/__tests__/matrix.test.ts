@@ -96,4 +96,43 @@ describe("§13.1 access matrix", () => {
     expect(decideAccess({ role: "registrar", category: "mock_scores" }).allowed).toBe(false);
     expect(decideAccess({ role: "registrar", category: "persona_aeg" }).allowed).toBe(false);
   });
+
+  describe("§8.1 and §13.1 Phase 6 exit gate: dispatch without consent is impossible", () => {
+    it("denies dispatch access to placement_officer when consent is missing", () => {
+      const decision = decideAccess({
+        role: "placement_officer",
+        category: "persona_aeg",
+        consented: false,
+      });
+      expect(decision.allowed).toBe(false);
+      expect(decision.reason).toMatch(/student has not consented/i);
+    });
+
+    it("allows dispatch access to placement_officer when consent is granted", () => {
+      const decision = decideAccess({
+        role: "placement_officer",
+        category: "persona_aeg",
+        consented: true,
+      });
+      expect(decision.allowed).toBe(true);
+    });
+
+    it("denies dispatch access to ecell_coordinator for academic/persona data regardless of consent", () => {
+      const decision = decideAccess({
+        role: "ecell_coordinator",
+        category: "persona_aeg",
+        consented: true,
+      });
+      expect(decision.allowed).toBe(false);
+    });
+
+    it("allows assigned faculty mentor access by academic relationship without external consent record", () => {
+      const decision = decideAccess({
+        role: "faculty_mentor",
+        category: "intervention_history",
+        isAssigned: true,
+      });
+      expect(decision.allowed).toBe(true);
+    });
+  });
 });

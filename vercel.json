@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "SKIP_ENV_VALIDATION=1 npm run build",
+  "buildCommand": "npm run build",
   "installCommand": "npm ci --include=dev",
   "ignoreCommand": "node scripts/vercel-ignore.mjs",
   "regions": ["bom1"],

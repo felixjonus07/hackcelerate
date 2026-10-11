@@ -11,7 +11,7 @@
  * for development purposes only.
  */
 import { createHash, createHmac, randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../logger";
 
@@ -65,7 +65,7 @@ export interface ObjectStore {
  * The student ID is used for organizing but NOT for authorization.
  * Authorization is always server-side.
  */
-export function generateObjectKey(studentId: string, originalFilename: string, contentType: string): string {
+export function generateObjectKey(studentId: string, _originalFilename: string, contentType: string): string {
   // Extract extension from content type, not from user-supplied filename
   const ext = mimeToExtension(contentType) || "bin";
   const uuid = randomUUID();
