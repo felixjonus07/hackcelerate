@@ -47,13 +47,25 @@ const schema = z.object({
 
 const DEV_SECRET = "dev-only-secret-change-me-0000000000000000";
 
-export const env = schema
-  .refine((e) => e.NODE_ENV !== "production" || e.BETTER_AUTH_SECRET !== DEV_SECRET, {
-    message: "Set BETTER_AUTH_SECRET in production (openssl rand -base64 32)",
-  })
-  .parse(process.env);
+/**
+ * Set SKIP_ENV_VALIDATION=1 to bypass validation during CI/CD builds
+ * where env vars are not available at build time (e.g. Vercel build step).
+ * Validation still runs at runtime on the actual server.
+ */
+const skipValidation = process.env.SKIP_ENV_VALIDATION === "1";
+
+export const env = skipValidation
+  ? (process.env as unknown as z.infer<typeof schema>)
+  : schema
+      .refine((e) => e.NODE_ENV !== "production" || e.BETTER_AUTH_SECRET !== DEV_SECRET, {
+        message: "Set BETTER_AUTH_SECRET in production (openssl rand -base64 32)",
+      })
+      .parse(process.env);
+
 export const demoLoginEnabled =
-  env.DEMO_LOGIN_ENABLED && (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
+  !skipValidation &&
+  env.DEMO_LOGIN_ENABLED &&
+  (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
 export const isProduction = env.NODE_ENV === "production";
 export const oidcEnabled = Boolean(env.OIDC_DISCOVERY_URL && env.OIDC_CLIENT_ID);
 export const llmEnabled = Boolean(env.OPENROUTER_API_KEY);
