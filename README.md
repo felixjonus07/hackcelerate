@@ -241,6 +241,49 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
 - Moved `@tailwindcss/turbopack` and `tailwindcss` from `devDependencies` to `dependencies` in `package.json`.
 - Updated `vercel.json` `installCommand` to `npm ci --include=dev` so build-time devDependencies (`typescript`, `@types/*`, `babel-plugin-react-compiler`) are preserved when Vercel sets `NODE_ENV=production`.
 
+### 2026-10-11: Phase 6 — Interventions & counseling completion (§8, §12.2, §12.4, §13.1)
+- Implemented consent check at dispatch (`src/server/services/approvals.ts`): interventions to external/placement/co-curricular roles (in `CONSENT_RECIPIENTS` per §13.1 Table 13.1) verify student consent for `intervention_history` / `persona_aeg`. If consent is missing, dispatch is blocked with a clear reason, recorded in `audit_events`, and retained at `APPROVED` until consent is granted. Academic roles (assigned faculty mentor, class advisor) dispatch immediately per academic relationship.
+- Added SLA tracking and escalation background worker (`src/server/services/approvals.ts`, `src/workers/index.ts`): scheduled job (`sla_escalation`) evaluates overdue interventions past working-day SLA and escalation window using institution holiday calendar, escalating to configured `escalate_to` role (`PENDING_APPROVAL`).
+- Implemented Quest lifecycle and completion verification (`src/server/services/quests.ts`):
+  - Overdue quests past `dueAt` transition to `EXPIRED` and advance student counseling cards to `FOLLOW_UP_DUE` via scheduled maintenance job (`quest_expiry`).
+  - Quests advance to `DONE` only when the linked artifact is verified (`VERIFIED` or `ATTESTED`) AND matches the quest's `requiredEvidenceType` (§8.3).
+  - Student evidence submission enqueues background verification worker.
+- Built Mentor Brief service and UI components (`src/server/services/mentor-brief.ts`, `src/components/staff/mentor-brief.tsx`):
+  - Three verifiable facts computed purely in code, each displaying exact source field and `ev:ID` audit citation.
+  - Identification of data gaps and rules-engine derived suggested questions (contextual to `aegIndex` and target date).
+  - Pivot advisory displaying score delta and target track based on rubric evaluation (§7.6).
+  - Integrated `MentorBrief` on the approval queue screen (`/admin/approvals`) and `MentorGuidanceCard` on the student deep-dive screen (`/admin/students/[id]`).
+- Added authorization tests (`src/server/consent/__tests__/matrix.test.ts`) and Phase 6 unit suite (`src/server/services/__tests__/phase6.test.ts`) verifying that dispatch without consent is impossible and all exit gate requirements are met.
+
+### 2026-10-11: Phase 7 — Student experience completion (§12.1, §12.3, §13.7, §14.2)
+- **Onboarding wired end-to-end (§12.1)**:
+  - Wire all six cards of `OnboardingWizard` (`src/components/onboarding/wizard.tsx`):
+    - Card 1 (Notice): plain-language explanation of collection, logged notice acknowledgment (`notice.ack` audit event via `acknowledgeNotice`).
+    - Card 2 (Consent choices): granular sharing switches per office (Placement cell, E-Cell, Sports office) and academic categories, defaulting to mentor-only.
+    - Card 3 (Baseline check): read-only ERP baseline check (CGPA, attendance, department, year) with direct correction request action (`requestRight`).
+    - Card 4 (Ambition): track selector, outcome, target date (future-date validation), and readiness slider; saving triggers deterministic evaluation and updates declared track.
+    - Card 5 (Evidence): inline evidence submission form (`submitGeneralEvidence`) enqueuing background verification worker.
+    - Card 6 (Passport): setup completion summary and link to passport view.
+- **Data rights requests (§13.7, DPDP Act 2023)**:
+  - Built student personal data export endpoint (`GET /api/v1/students/me/export`): provides downloadable, machine-readable JSON containing baseline records, aspirations, artifacts, evaluations, consent records, and access audit log.
+  - Implemented correction routing (`src/server/services/rights.ts`): routes ERP data corrections to Registrar and narrative inquiries to assigned mentor.
+  - Implemented erasure against retention schedule: displays statutory 5-year retention requirements for official degrees while scheduling non-statutory data for 30-day deletion.
+  - Integrated request history in the Sharing center (`/student/consent`) displaying request types, status tags (`OPEN`, `PENDING_REVIEW`, `COMPLETED`), 30-day statutory response SLAs, and routing resolutions.
+- **Wellbeing guardrails & recovery nudges (§14.2)**:
+  - Implemented behavioral pattern checks in `src/server/services/wellbeing.ts`:
+    - `late_night_clustering`: study sessions after midnight on 5+ nights in 14 days.
+    - `mock_surge_attendance_drop`: mock volume surge > 100% in 1 week combined with attendance dip.
+    - `abrupt_inactivity`: 14 days pause in activity after heavy use.
+  - Transparent recovery nudges in `PassportView` (`src/app/student/passport/passport-view.tsx`): displays the exact pattern detected with non-stigmatizing, supportive phrasing (§14.3); presents campus counseling centre (Block A, Room 12) and emergency contacts (112); preserves permanent counseling contacts in the passport footer.
+- **Leaderboards opt-in with track tabs and verified chips (§4.1, §12.1)**:
+  - Read model (`src/server/services/leaderboard.ts`) ranking only students who opted in via `leaderboardOptIns`.
+  - Upgraded `/leaderboards` page with tabbed career tracks, streak badges, and verified evidence chips (`EvidenceChip`).
+  - Updated API route `GET /api/v1/leaderboards?track=` returning opted-in cohort rankings.
+- **Testing & verification**:
+  - Added Phase 7 unit tests in `src/server/services/__tests__/phase7.test.ts`.
+  - Added end-to-end journey tests in `e2e/student.spec.ts` ("onboarding end-to-end wizard", "passport and quest", "consent change and data rights").
+  - Test suite passes with 21/21 test files (244 passing tests) and `npm run check` clean.
+
 ## Roadmap (post-freeze ideas go here)
 
 

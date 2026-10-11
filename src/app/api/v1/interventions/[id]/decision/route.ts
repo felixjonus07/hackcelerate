@@ -27,7 +27,12 @@ export const POST = handle(async (req: Request, ctx: { params: Promise<{ id: str
       purpose: "approval_decision",
       result: "allowed",
     });
-    return json({ ok: true, status: row.status });
+    return json({
+      ok: true,
+      status: row.status,
+      dispatched: row.dispatchResult?.dispatched ?? false,
+      dispatchBlockedReason: row.dispatchResult?.reason ?? null,
+    });
   } catch (e) {
     return apiError(409, "decision_rejected", e instanceof Error ? e.message : "Could not record decision");
   }

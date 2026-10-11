@@ -45,6 +45,23 @@ export function PassportView({ data }: { data: PassportData }) {
       />
 
       <div className="grid gap-5 lg:grid-cols-2">
+        {data.wellbeingNudges?.map((nudge) => (
+          <Card key={nudge.patternId} className="lg:col-span-2 bg-sand">
+            <div className="flex items-start gap-3">
+              <LifeBuoy aria-hidden className="mt-0.5 size-5 shrink-0 text-mod" />
+              <div>
+                <h2 className="font-extrabold text-ink">{nudge.title}</h2>
+                <p className="mt-1 text-sm text-ink-2">{nudge.patternExplanation}</p>
+                <p className="mt-2 text-sm text-ink font-medium">{nudge.supportMessage}</p>
+                <div className="mt-3 flex flex-wrap gap-4 text-xs text-ink-2 border-t border-line pt-2.5">
+                  <span>{nudge.counselingContact}</span>
+                  <span>{nudge.emergencyContact}</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+
         <Card aria-labelledby="score-h">
           <p id="score-h" className="text-sm font-bold text-ink-2">
             {data.trackName} · track score

@@ -6,15 +6,7 @@
 import { describe, expect, it } from "vitest";
 import type { VerificationStatus } from "../../policy/schema";
 import { VERIFICATION_STATUSES } from "../../policy/schema";
-import {
-  type ActorKind,
-  canTransition,
-  LifecycleError,
-  TRANSITIONS,
-  type TransitionDeps,
-  type TransitionRequest,
-  transitionArtifact,
-} from "../lifecycle";
+import { canTransition, LifecycleError, TRANSITIONS, type TransitionDeps, transitionArtifact } from "../lifecycle";
 
 /* ──────────────── Mock DB for testing ──────────────── */
 
@@ -34,7 +26,7 @@ interface MockEvent {
   reason: string;
 }
 
-function createMockDeps(artifacts: MockArtifact[]): {
+function _createMockDeps(artifacts: MockArtifact[]): {
   deps: TransitionDeps;
   getArtifact: (id: string) => MockArtifact | undefined;
   getEvents: () => MockEvent[];
@@ -142,7 +134,7 @@ function createMockDeps(artifacts: MockArtifact[]): {
 
 /* ────────── Simple mock deps that work with string matching ────────── */
 
-function simpleMockDeps(initial: { id: string; status: VerificationStatus }[]) {
+function _simpleMockDeps(initial: { id: string; status: VerificationStatus }[]) {
   const artifacts = initial.map((a) => ({
     id: a.id,
     status: a.status,
@@ -276,7 +268,7 @@ describe("§6.1 Transition table", () => {
   });
 
   it("ensures every target status is a valid VerificationStatus", () => {
-    for (const [from, targets] of Object.entries(TRANSITIONS)) {
+    for (const [_from, targets] of Object.entries(TRANSITIONS)) {
       for (const to of targets) {
         expect(VERIFICATION_STATUSES).toContain(to);
       }

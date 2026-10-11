@@ -9,14 +9,16 @@ import { CONSENT_RECIPIENTS, CONSENTABLE } from "@/server/consent/matrix";
 import { db } from "@/server/db";
 import { leaderboardOptIns } from "@/server/db/schema";
 import { currentConsents } from "@/server/services/consent";
+import { getStudentRightsRequests } from "@/server/services/rights";
 
 export const metadata: Metadata = { title: "Sharing" };
 
 async function Consents() {
   const { student } = await requireStudent();
-  const [state, [lb]] = await Promise.all([
+  const [state, [lb], rights] = await Promise.all([
     currentConsents(student.id),
     db.select().from(leaderboardOptIns).where(eq(leaderboardOptIns.studentId, student.id)).limit(1),
+    getStudentRightsRequests(student.id),
   ]);
   return (
     <ConsentCenter
@@ -24,6 +26,7 @@ async function Consents() {
       categories={CONSENTABLE as Record<string, string>}
       recipients={[...CONSENT_RECIPIENTS]}
       leaderboard={lb?.optedIn ?? false}
+      rightsRequestsList={rights}
     />
   );
 }

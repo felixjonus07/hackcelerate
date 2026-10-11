@@ -31,6 +31,8 @@ test("mentor sees the approval queue with a brief and decision controls", async 
   await signIn(page, MENTOR);
   await expect(page).toHaveURL(/\/admin\/approvals/);
   await expect(page.getByRole("heading", { name: "Approval queue" })).toBeVisible();
+  await expect(page.getByText("Three verifiable facts")).toBeVisible();
+  await expect(page.getByText("Suggested questions")).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve" })).toBeVisible();
 });
 

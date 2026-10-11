@@ -283,7 +283,7 @@ export async function checkCommitAuthorship(
   try {
     // Get up to 100 recent commits
     res = await githubFetch(`/repos/${owner}/${repo}/commits?per_page=100`);
-  } catch (err) {
+  } catch (_err) {
     return {
       totalCommits: 0,
       authoredCommits: 0,

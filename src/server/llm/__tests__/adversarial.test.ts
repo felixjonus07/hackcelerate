@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { loadPolicyFile } from "../../policy/load";
 import { evaluate } from "../../rules";
-import { CS_44, ME_27 } from "../../rules/fixtures";
+import { ME_27 } from "../../rules/fixtures";
 import { buildFacts, sanitizeUntrusted } from "../prompt";
 import { narrativeSchema } from "../schema";
 import { validateNarrative } from "../validator";
@@ -278,7 +278,7 @@ describe("§9.3 & Appendix C Adversarial Suite (≥ 20 Attack Vectors)", () => {
 
   // Case 22: Non-JSON Response / Conversational Preamble
   it("Case 22: Conversational preamble before JSON fails at parse", () => {
-    const nonJson = "Hello! Here is the narrative for ME-27:\n" + makeResponse();
+    const nonJson = `Hello! Here is the narrative for ME-27:\n${makeResponse()}`;
     const v = validateNarrative(nonJson, layer);
     expect(v.failedAt).toBe("parse");
     expect(v.ok).toBe(false);

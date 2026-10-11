@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { runEval } from "@/app/admin/actions";
 import { PageHeader } from "@/components/shell/app-shell";
 import { ComponentRadar } from "@/components/staff/component-radar";
+import { MentorGuidanceCard } from "@/components/staff/mentor-brief";
 import { NarrativeText } from "@/components/staff/narrative-text";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -122,6 +123,7 @@ async function Record({ params, searchParams }: Props) {
               }))}
             />
           </Card>
+          <MentorGuidanceCard brief={brief} />
           <Card>
             <CardHeader title="Evidence" />
             {brief.evidence.length ? (

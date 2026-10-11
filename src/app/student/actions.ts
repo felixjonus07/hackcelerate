@@ -10,9 +10,10 @@ import { audit } from "@/server/audit/log";
 import { requireStudent } from "@/server/auth/session";
 import { CONSENT_RECIPIENTS, CONSENTABLE } from "@/server/consent/matrix";
 import { db } from "@/server/db";
-import { artifacts, aspirations, leaderboardOptIns, quests, rightsRequests, students } from "@/server/db/schema";
+import { artifacts, aspirations, leaderboardOptIns, quests, students } from "@/server/db/schema";
 import type { ConsentCategory, Role } from "@/server/db/schema/enums";
 import { TRACK_IDS } from "@/server/policy/schema";
+import { enqueue } from "@/server/queue";
 import { setConsent } from "@/server/services/consent";
 import { runEvaluation } from "@/server/services/evaluations";
 
@@ -69,6 +70,14 @@ export async function submitQuestEvidence(_: unknown, form: FormData): Promise<{
     })
     .returning();
   await db.update(quests).set({ status: "EVIDENCE_SUBMITTED", evidenceArtifactId: a.id }).where(eq(quests.id, q.id));
+  await enqueue("verification", {
+    artifactId: a.id,
+    kind: /github\.com/.test(parsed.data.sourceUrl)
+      ? "github"
+      : /doi\.org/.test(parsed.data.sourceUrl)
+        ? "crossref"
+        : "link",
+  }).catch(() => null);
   await audit({
     actorUserId: user.id,
     actorRole: user.role,
@@ -108,6 +117,74 @@ export async function updateConsent(input: z.infer<typeof consentInput>) {
   revalidatePath("/student/consent");
 }
 
+export async function acknowledgeNotice() {
+  const { user, student } = await requireStudent();
+  await audit({
+    actorUserId: user.id,
+    actorRole: user.role,
+    action: "notice.ack",
+    entityType: "student",
+    entityId: student.pseudonymousId,
+    purpose: "onboarding",
+    result: "allowed",
+  });
+}
+
+const generalEvidenceInput = z.object({
+  label: z.string().min(3).max(200),
+  sourceUrl: z.string().url().max(500),
+  type: z.enum(["repository", "doi", "portfolio", "certificate", "letter"]).default("portfolio"),
+  description: z.string().max(1000).optional(),
+});
+
+export async function submitGeneralEvidence(_: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
+  const { user, student } = await requireStudent();
+  const parsed = generalEvidenceInput.safeParse({
+    label: form.get("label"),
+    sourceUrl: form.get("sourceUrl"),
+    type: form.get("type") || "portfolio",
+    description: form.get("description") || undefined,
+  });
+  if (!parsed.success) return { ok: false, message: "Add a label and a full link starting with https://" };
+
+  const [a] = await db
+    .insert(artifacts)
+    .values({
+      studentId: student.id,
+      type: parsed.data.type,
+      component: "general",
+      label: parsed.data.label,
+      description: parsed.data.description ?? null,
+      sourceUrl: parsed.data.sourceUrl,
+      source: "student",
+      status: "SUBMITTED",
+    })
+    .returning();
+
+  await enqueue("verification", {
+    artifactId: a.id,
+    kind: /github\.com/.test(parsed.data.sourceUrl)
+      ? "github"
+      : /doi\.org/.test(parsed.data.sourceUrl)
+        ? "crossref"
+        : "link",
+  }).catch(() => null);
+
+  await audit({
+    actorUserId: user.id,
+    actorRole: user.role,
+    action: "artifact.submit",
+    entityType: "artifact",
+    entityId: a.id,
+    purpose: "onboarding_evidence",
+    result: "allowed",
+  });
+
+  await runEvaluation(student.id, { actorUserId: user.id });
+  revalidatePath("/student", "layout");
+  return { ok: true, message: "Evidence submitted and queued for verification." };
+}
+
 export async function setLeaderboardVisibility(optedIn: boolean) {
   const { student } = await requireStudent();
   await db
@@ -120,23 +197,11 @@ export async function setLeaderboardVisibility(optedIn: boolean) {
   revalidatePath("/student/consent");
 }
 
+import { submitRightsRequest } from "@/server/services/rights";
+
 export async function requestRight(kind: "access" | "correction" | "erasure", detail?: string) {
   const { user, student } = await requireStudent();
-  await db.insert(rightsRequests).values({
-    studentId: student.id,
-    kind,
-    detail: detail ?? null,
-    dueAt: new Date(Date.now() + 30 * 86_400_000),
-  });
-  await audit({
-    actorUserId: user.id,
-    actorRole: user.role,
-    action: `rights.${kind}`,
-    entityType: "student",
-    entityId: student.pseudonymousId,
-    purpose: "rights_request",
-    result: "allowed",
-  });
+  await submitRightsRequest(student.id, user.id, user.role, student.pseudonymousId, kind, detail);
   revalidatePath("/student/consent");
 }
 

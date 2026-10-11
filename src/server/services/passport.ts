@@ -11,6 +11,7 @@ import { evaluate, whatIf } from "../rules";
 import type { StudentFacts } from "../rules/types";
 import { latestEvaluation } from "./evaluations";
 import { loadStudentFacts } from "./facts";
+import { detectWellbeingNudges } from "./wellbeing";
 
 export async function getPassport(studentId: string) {
   const policy = getActivePolicy();
@@ -63,6 +64,8 @@ export async function getPassport(studentId: string) {
     return sim.trackScore.score - base;
   };
 
+  const wellbeingNudges = await detectWellbeingNudges(studentId);
+
   return {
     student,
     displayName: identity?.displayName ?? "",
@@ -72,6 +75,7 @@ export async function getPassport(studentId: string) {
     quests: questRows.map((q) => ({ ...q, impact: questImpact(q) })),
     trackName: evaluation ? (policy.tracks[evaluation.track]?.name ?? evaluation.track) : null,
     policyVersion: policy.policy_version,
+    wellbeingNudges,
   };
 }
 

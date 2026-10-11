@@ -7,8 +7,8 @@
  */
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { artifactStatusEvents, artifacts } from "../db/schema";
-import { studentIdentities, students } from "../db/schema/people";
+import { artifacts } from "../db/schema";
+import { studentIdentities } from "../db/schema/people";
 import { logger } from "../logger";
 import type { VerificationStatus } from "../policy/schema";
 import { verifyCrossref } from "./crossref";

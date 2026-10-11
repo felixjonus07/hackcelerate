@@ -188,15 +188,15 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 **Goal:** no student is contacted without a named approver (§1.3, §8).
 
 - [x] Intervention created only as `PENDING_APPROVAL`; decision endpoint approve / edit-and-approve / reject
-- [ ] Consent check at dispatch (recipient + category) — blocks and explains when consent is missing
-- [ ] SLA tracking + escalation jobs (§8.1)
+- [x] Consent check at dispatch (recipient + category) — blocks and explains when consent is missing
+- [x] SLA tracking + escalation jobs (§8.1)
 - [x] Counseling Kanban columns (§8.2); WIP limit 25 with over-limit banner
-- [ ] Kanban: backward moves require a reason; 14-day inactivity amber marker; quest expiry → Follow-up due
+- [x] Kanban: backward moves require a reason; 14-day inactivity amber marker; quest expiry → Follow-up due
 - [x] Keyboard moves + screen-reader announcements (dnd-kit keyboard sensor) (§12.4)
-- [ ] Quest lifecycle (§8.3): Proposed → Accepted → Active → Evidence submitted → Done / Expired; completes only with evidence of the named type
-- [ ] Mentor brief: three facts, data gaps, two suggested questions, pivot options, each fact linked to its source field
+- [x] Quest lifecycle (§8.3): Proposed → Accepted → Active → Evidence submitted → Done / Expired; completes only with evidence of the named type
+- [x] Mentor brief: three facts, data gaps, two suggested questions, pivot options, each fact linked to its source field
 
-**Exit gate:** e2e "mentor approval" journey passes; dispatch without consent is impossible (authorization test).
+**Exit gate:** e2e "mentor approval" journey passes; dispatch without consent is impossible (authorization test). [MET]
 
 ---
 
@@ -208,11 +208,11 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Passport: track score vs readiness, gap index, trend, breakdown, data gaps → quests
 - [x] What-if simulator calling the rules engine, writes nothing
 - [x] Consent center: toggles per category × recipient, default mentor-only
-- [ ] Onboarding wired end-to-end: notice ack, consent choices, baseline check + correction request, ambition (dates validated), evidence, first evaluation
+- [x] Onboarding wired end-to-end: notice ack, consent choices, baseline check + correction request, ambition (dates validated), evidence, first evaluation
 - [x] Evidence submission with live status chips
-- [ ] Rights requests (§13.7): access export, correction routing, erasure against retention schedule
-- [ ] Wellbeing nudges (§14.2) with campus counseling + emergency contacts in the passport footer
-- [ ] Leaderboards opt-in (off by default), tabs per track, verified-link chips
+- [x] Rights requests (§13.7): access export, correction routing, erasure against retention schedule
+- [x] Wellbeing nudges (§14.2) with campus counseling + emergency contacts in the passport footer
+- [x] Leaderboards opt-in (off by default), tabs per track, verified-link chips
 
 **Exit gate:** e2e journeys "onboarding", "passport and quest", "consent change" pass on Chromium and WebKit.
 

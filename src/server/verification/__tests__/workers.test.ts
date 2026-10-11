@@ -3,13 +3,7 @@
  * Uses unit-level tests without real external API calls.
  */
 import { describe, expect, it } from "vitest";
-import {
-  ALLOWED_MIME_TYPES,
-  generateObjectKey,
-  MAX_FILE_SIZE,
-  MAX_SIGNED_URL_SECONDS,
-  validateUpload,
-} from "../../storage";
+import { generateObjectKey, MAX_FILE_SIZE, MAX_SIGNED_URL_SECONDS, validateUpload } from "../../storage";
 import { nameMatchScore, normalizeDoi } from "../crossref";
 import { parseGitHubUrl } from "../github";
 import { validateUrl } from "../link";
@@ -243,7 +237,7 @@ describe("§6.2 10% external mock sampling", () => {
       term: "2026-odd",
     }));
     const decisions = selectSample(candidates, { samplePercentage: 10 }, "salt");
-    const validation = validateSamplingDistribution(decisions, 10, 5);
+    const _validation = validateSamplingDistribution(decisions, 10, 5);
     // With 5 candidates, tolerance is wider (5 * 3 = 15%)
     expect(decisions).toHaveLength(5);
   });

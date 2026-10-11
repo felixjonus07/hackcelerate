@@ -32,8 +32,9 @@ export async function decideIntervention(_: unknown, form: FormData): Promise<{ 
       message: "Something in the form is missing. Reload and try again.",
     };
   const d = parsed.data;
+  let res: Awaited<ReturnType<typeof decide>>;
   try {
-    await decide(d.interventionId, user, d.decision, d.note ?? null, d.message ?? null);
+    res = await decide(d.interventionId, user, d.decision, d.note ?? null, d.message ?? null);
   } catch (e) {
     return {
       ok: false,
@@ -51,12 +52,16 @@ export async function decideIntervention(_: unknown, form: FormData): Promise<{ 
     result: "allowed",
   });
   revalidatePath("/admin/approvals");
+
+  let message = "Approved and dispatched.";
+  if (d.decision === "reject") {
+    message = "Rejected. The reason is saved with the record.";
+  } else if (res.dispatchResult && !res.dispatchResult.dispatched && res.dispatchResult.reason) {
+    message = `Approved, but dispatch blocked: ${res.dispatchResult.reason}`;
+  }
   return {
     ok: true,
-    message:
-      d.decision === "reject"
-        ? "Rejected. The reason is saved with the record."
-        : "Approved. It's now in the dispatch queue.",
+    message,
   };
 }
 
