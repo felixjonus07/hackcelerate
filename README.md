@@ -188,6 +188,15 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
 - Unit test suite expanded from 49 to 84 tests (all passing).
 - Run: `npm run db:migrate && npm run db:seed` (or `npm run db:reset`).
 
+### 2026-10-11: Phase 2 — Rules engine completion (§5)
+- Implemented deterministic calculators for all six tracks in `src/server/rules/rubrics/index.ts` (§5.3): Corporate Placement, Higher Studies & Research, Entrepreneurship & Startups, Public Service & Government Exams, Freelance & Creator Economy, and Sports, Defense & NCC.
+- Higher Studies entrance exams: enforced mixed-source lowest-multiplier rule (`min_{m} multiplier(m.status)` across practice mock sources, §5.3.2) and timed mock speed sub-measure.
+- Sports, Defense & NCC: physical fitness scaled by BMI band factor (`NORMAL`, `WATCH`, `EVALUATE`), strictly guaranteeing BMI is never displayed or output as a number to protect students from comparison and body-image harm (§5.3.6).
+- Track gates (§5.3): implemented gate evaluation for all tracks (`at_least_one_department_standard_item`, `cgpa_above_eligibility_floor`, `attendance_at_or_above_requirement`, `minimum_credits_held`). Updated UI in student passport and what-if simulator to show gate failure notice and "Not enough evidence yet" before scores are shown.
+- Version stamp: recorded `RULES_ENGINE_VERSION` (semver) on every evaluation.
+- Added comprehensive rubric specification suite (`src/server/rules/__tests__/rubrics.test.ts`, 10 tests) and fast-check property testing suite (`src/server/rules/__tests__/properties.test.ts`, 21,000 runs) proving score boundedness in [0, 100] and monotonicity (adding verified evidence never lowers a score, §15.1).
+- Reviewed rendered UI with Playwright CLI at desktop (1440) and mobile (390) viewports with zero horizontal overflow.
+
 ## Roadmap (post-freeze ideas go here)
 
 

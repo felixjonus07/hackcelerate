@@ -474,34 +474,32 @@ async function main() {
     const day = String(1 + ((i * 3) % 28)).padStart(2, "0");
     const dobString = `${birthYear}-${month}-${day}`;
 
-    const [s] = await db
-      .insert(t.students)
-      .values({
-        userId: userId ?? null,
-        pseudonymousId: f.studentId,
-        departmentCode: f.department,
-        year: f.year,
-        batch: String(2026 + (5 - f.year)),
-        declaredTrack: f.aspiration.track,
-        cgpa: f.cgpa,
-        attendancePct: f.attendancePct,
-        activeBacklogs: f.activeBacklogs ?? 0,
-        dateOfBirth: dobString,
-        parentalConsentRequired: isUnder18Test,
-        isSynthetic: true,
-        signals: {
-          artifactScore: f.artifactScore ?? null,
-          cohortArtifactP75: f.cohortArtifactP75 ?? null,
-          verifiedProjects: f.verifiedProjects ?? 0,
-          activityLast60d: f.activityLast60d ?? 0,
-          mocksLast60d: f.mocksLast60d ?? 0,
-          monthsToDeadline: f.monthsToDeadline ?? null,
-          streakValidDays: f.streakValidDays,
-          streakGapDays14: f.streakGapDays14,
-          precomputed: f.precomputed,
-        },
-      })
-      .returning();
+    const insertData: typeof t.students.$inferInsert = {
+      userId: userId ?? undefined,
+      pseudonymousId: f.studentId,
+      departmentCode: f.department,
+      year: f.year,
+      batch: String(2026 + (5 - f.year)),
+      declaredTrack: f.aspiration.track ?? undefined,
+      cgpa: f.cgpa ?? undefined,
+      attendancePct: f.attendancePct ?? undefined,
+      activeBacklogs: f.activeBacklogs ?? 0,
+      dateOfBirth: dobString,
+      parentalConsentRequired: isUnder18Test,
+      isSynthetic: true,
+      signals: {
+        artifactScore: f.artifactScore ?? null,
+        cohortArtifactP75: f.cohortArtifactP75 ?? null,
+        verifiedProjects: f.verifiedProjects ?? 0,
+        activityLast60d: f.activityLast60d ?? 0,
+        mocksLast60d: f.mocksLast60d ?? 0,
+        monthsToDeadline: f.monthsToDeadline ?? null,
+        streakValidDays: f.streakValidDays ?? undefined,
+        streakGapDays14: f.streakGapDays14 ?? undefined,
+        precomputed: f.precomputed,
+      },
+    };
+    const [s] = await db.insert(t.students).values(insertData).returning();
     studentIds.push(s.id);
     await db.insert(t.studentIdentities).values({
       studentId: s.id,

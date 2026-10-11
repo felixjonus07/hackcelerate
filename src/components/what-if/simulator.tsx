@@ -108,6 +108,9 @@ export function WhatIfSimulator({ facts, policy }: { facts: StudentFacts; policy
               </span>
             </span>
           </div>
+          {sim.trackScore.gateFailed ? (
+            <p className="mt-1 text-xs font-semibold text-crit">{sim.trackScore.gateFailed}</p>
+          ) : null}
           <ReadinessBar score={sim.trackScore.score} readiness={sim.readiness} className="mt-5" />
         </div>
         <CardHeader
@@ -189,6 +192,9 @@ export function WhatIfSimulator({ facts, policy }: { facts: StudentFacts; policy
             </span>
           </div>
           <ReadinessBar score={sim.trackScore.score} readiness={sim.readiness} />
+          {sim.trackScore.gateFailed ? (
+            <p className="mt-2 text-xs font-semibold text-crit">{sim.trackScore.gateFailed}</p>
+          ) : null}
           <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-ink-2">
             <span>
               Target <strong className="tabular text-ink">{sim.readiness}</strong> · now{" "}
