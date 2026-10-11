@@ -205,7 +205,7 @@ export async function handleRecheckOutcome(
 
 /* ────────────────── Kind inference ────────────────── */
 
-function inferVerificationKind(artifactKind: string, sourceUrl: string | null): "github" | "crossref" | "link" | null {
+function inferVerificationKind(_artifactKind: string, sourceUrl: string | null): "github" | "crossref" | "link" | null {
   if (!sourceUrl) return null;
   const url = sourceUrl.toLowerCase();
 

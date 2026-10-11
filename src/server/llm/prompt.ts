@@ -89,6 +89,15 @@ export function buildFacts(input: FactsInput, policy: Policy): { layer: FactsLay
       id: `gap:${i + 1}`,
       fact: `Data gap: ${g}`,
     })),
+    ...(t.dataGaps.length > 0
+      ? [
+          {
+            id: "gaps_count",
+            fact: `${t.dataGaps.length} items without evidence`,
+            value: t.dataGaps.length,
+          },
+        ]
+      : []),
     ...input.evidence.map((ev) => ({
       id: ev.id,
       fact: `${ev.label} — ${ev.status.replace("_", " ").toLowerCase()}`,

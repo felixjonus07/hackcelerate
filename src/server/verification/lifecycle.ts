@@ -7,7 +7,6 @@
  * status updates on the artifacts table are forbidden.
  */
 import { and, eq } from "drizzle-orm";
-import type { PgTransaction } from "drizzle-orm/pg-core";
 import type { VerificationStatus } from "../policy/schema";
 
 /* ───────────────────── Transition table (§6.1) ───────────────────── */
@@ -217,11 +216,11 @@ export async function transitionArtifact(req: TransitionRequest, deps: Transitio
  * without a live database and workers can use it without `server-only`.
  */
 export interface TransitionDeps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: generic drizzle transaction
   db: { transaction: <T>(fn: (tx: any) => Promise<T>) => Promise<T> };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: generic drizzle schema
   artifacts: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: generic drizzle schema
   artifactStatusEvents: any;
 }
 
@@ -240,6 +239,11 @@ export function getRealDeps(): TransitionDeps {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { artifacts, artifactStatusEvents } =
     require("../db/schema/evidence") as typeof import("../db/schema/evidence");
-  _cachedDeps = { db: db as TransitionDeps["db"], artifacts, artifactStatusEvents };
-  return _cachedDeps!;
+  const deps: TransitionDeps = {
+    db: db as unknown as TransitionDeps["db"],
+    artifacts,
+    artifactStatusEvents,
+  };
+  _cachedDeps = deps;
+  return deps;
 }

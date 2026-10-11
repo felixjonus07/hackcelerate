@@ -175,6 +175,11 @@ export const policySchema = z.object({
     inactivity_amber_days: z.number().int().positive(),
   }),
   wellbeing: z.record(z.string(), z.number()),
+  calendar: z
+    .object({
+      holidays: z.array(z.string()).default([]),
+    })
+    .default({ holidays: [] }),
 });
 
 export type Policy = z.infer<typeof policySchema>;
