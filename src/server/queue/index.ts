@@ -30,7 +30,11 @@ export interface JobPayloads {
     kind: "github" | "crossref" | "link" | "certificate";
     attempt?: number;
   };
-  ingestion: { source: "erp_nightly" | "manual"; filePath?: string };
+  ingestion: {
+    source: "erp_nightly" | "manual";
+    filePath?: string;
+    csvContent?: string;
+  };
   maintenance: {
     task: "sla_escalation" | "quest_expiry" | "retention" | "recheck_evidence";
   };

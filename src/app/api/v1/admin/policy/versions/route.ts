@@ -1,9 +1,29 @@
+import { desc } from "drizzle-orm";
 import { handle, json } from "@/server/api/handler";
 import { audit } from "@/server/audit/log";
 import { requireApiUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { policyVersions } from "@/server/db/schema";
 import { policySchema } from "@/server/policy/schema";
+
+/** GET /api/v1/admin/policy/versions — list all policy versions (registrar, dean, hod, auditor). */
+export const GET = handle(async () => {
+  await requireApiUser(["registrar", "dean", "hod", "auditor"]);
+  const rows = await db
+    .select({
+      version: policyVersions.version,
+      status: policyVersions.status,
+      effectiveFrom: policyVersions.effectiveFrom,
+      createdBy: policyVersions.createdBy,
+      approvals: policyVersions.approvals,
+      activatedAt: policyVersions.activatedAt,
+      createdAt: policyVersions.createdAt,
+    })
+    .from(policyVersions)
+    .orderBy(desc(policyVersions.createdAt));
+
+  return json({ ok: true, versions: rows });
+});
 
 /** POST /api/v1/admin/policy/versions — create a DRAFT policy version (registrar). */
 export const POST = handle(async (req: Request) => {

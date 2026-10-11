@@ -174,7 +174,23 @@ Phase 0 (foundation & scaffolding) is complete apart from CI. See [`PLAN.md`](PL
 - Saffron restricted to actions (readiness tick is now ink with a label); eyebrow labels removed; citation chips enlarged.
 - Added `playwright.config.ts` and `e2e/smoke.spec.ts` (5 journeys, all passing).
 
+### 2026-10-11: Worker runner compatibility
+- Wrapped the BullMQ scheduler setup in `src/workers/index.ts` inside an async `start()` function to support CommonJS execution under `tsx` without top-level await errors.
+
+### 2026-10-11: Phase 1 — Data layer & policy completion (§3, §4)
+- Added `parentalConsentRequired` and `parentalConsentAt` on `students` for DPDP Act 2023 / §4.3 under-18 consent check (migration `0004_parental_consent`).
+- Implemented pure data-quality validators in `src/server/ingestion/quality.ts` covering every row of Table 4.3 (CGPA range, attendance week & series confidence degradation, mock attempt speed & percentile exclusion, artifact URL reachability, roll number format, and date-of-birth consistency with under-18 parental check).
+- Implemented ERP CSV import job (`src/server/ingestion/erp.ts`) with flexible column mapping, SHA-256 checksum tracking via `ingestion_runs`, bad roll number rejection, missing file stale detection, and worker integration.
+- Upgraded policy loader (`src/server/policy/load.ts`) to resolve active policy from database `policy_versions` with fallback to `policy/2026.10-v1.json`, cache invalidation on policy activation, and strict validation that track component weights sum to 100 (§5.3).
+- Added `GET /api/v1/admin/policy/versions` endpoint to query version history.
+- Added append-only trigger tests (`src/server/db/__tests__/immutability.test.ts`) verifying PostgreSQL rejects `UPDATE` and `DELETE` on `evaluations` and `audit_events`.
+- Updated seed script (`scripts/seed.ts`) to seed active policy versions, realistic student dates of birth across 7 departments with under-18 test accounts, and pgvector embeddings for `remediation_library` and `opportunities` when `OPENROUTER_API_KEY` is present.
+- Unit test suite expanded from 49 to 84 tests (all passing).
+- Run: `npm run db:migrate && npm run db:seed` (or `npm run db:reset`).
+
 ## Roadmap (post-freeze ideas go here)
+
+
 
 - Server-side PDF export for the audit report
 - WhatsApp digest templates (opt-in)
