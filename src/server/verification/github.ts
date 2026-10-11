@@ -1,440 +1,153 @@
 /**
- * GitHub repository verification (§6.2).
- *
- * Checks: repository existence, ownership, creation date, fork status,
- * commit authorship, and rate limits. Uses the authenticated GitHub API
- * when a token is available.
- *
- * Never logs OAuth tokens or access keys.
+ * GitHub repository check (§6.2): owner, creation date, commit authorship and fork status. Ownership
+ * is proven by the student's OAuth-linked login; a repository whose owner we cannot tie to the
+ * student stays LIVE_UNVERIFIED. Private repositories are never readable without consent.
  */
-import { env } from "../env";
-import { logger } from "../logger";
 
-/* ────────────────── Types ────────────────── */
+import type { Policy, VerificationStatus } from "../policy/schema";
+import { burstCommits, type IntegrityFlag } from "../rules/integrity";
+import type { Fetcher } from "./http";
 
-export interface GitHubVerificationResult {
-  /** Whether the verification succeeded overall. */
-  verified: boolean;
-  /** Whether the result is inconclusive and needs human review. */
-  needsReview: boolean;
-  /** Safe explanation of the outcome. */
-  reason: string;
-  /** Verified repository metadata (if accessible). */
-  metadata?: {
-    owner: string;
-    name: string;
-    createdAt: string;
-    isFork: boolean;
-    defaultBranch: string;
-    parentOwner?: string;
-  };
-  /** Commit authorship check results. */
-  authorship?: {
-    totalCommits: number;
-    authoredCommits: number;
-    authorshipRatio: number;
-    matched: boolean;
-  };
-  /** Whether the failure is retryable. */
-  retryable: boolean;
-  /** Error category for operational logging. */
-  errorCategory?: "rate_limit" | "auth" | "not_found" | "network" | "server" | "malformed" | "private";
+const API = "https://api.github.com";
+
+export interface RepoReport {
+  state: "found" | "not_found" | "error";
+  httpStatus: number;
+  fullName?: string;
+  ownerLogin?: string;
+  fork?: boolean;
+  createdAt?: string;
+  /** Author dates of the student's own commits (up to 100). */
+  commitTimes: string[];
 }
 
-/* ────────────────── URL parsing ────────────────── */
-
-const GITHUB_REPO_RE =
-  /^https?:\/\/(?:www\.)?github\.com\/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+?)(?:\.git)?(?:[/#?].*)?$/;
-
-export function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
-  const m = url.match(GITHUB_REPO_RE);
-  if (!m) return null;
-  return { owner: m[1], repo: m[2] };
+export function parseRepoUrl(url: string): { owner: string; repo: string } | null {
+  const m = url.match(/^https?:\/\/(?:www\.)?github\.com\/([^/\s#?]+)\/([^/\s#?]+)/i);
+  return m ? { owner: m[1], repo: m[2].replace(/\.git$/i, "") } : null;
 }
 
-/* ────────────────── API helpers ────────────────── */
-
-function apiHeaders(): Record<string, string> {
-  const h: Record<string, string> = {
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
-  if (env.GITHUB_TOKEN) {
-    h.Authorization = `Bearer ${env.GITHUB_TOKEN}`;
-  }
-  return h;
-}
-
-async function githubFetch(path: string, signal?: AbortSignal): Promise<Response> {
-  // Construct URL from validated path, never from user input directly
-  const url = `https://api.github.com${path}`;
-  return fetch(url, {
-    headers: apiHeaders(),
-    signal: signal ?? AbortSignal.timeout(15_000),
-  });
-}
-
-interface RateLimitInfo {
-  remaining: number;
-  resetAt: Date;
-}
-
-function parseRateLimit(res: Response): RateLimitInfo {
-  return {
-    remaining: Number(res.headers.get("x-ratelimit-remaining") ?? 0),
-    resetAt: new Date(Number(res.headers.get("x-ratelimit-reset") ?? 0) * 1000),
-  };
-}
-
-/* ────────────────── Repository check ────────────────── */
-
-interface RepoResponse {
-  owner: { login: string };
-  name: string;
-  created_at: string;
-  fork: boolean;
-  default_branch: string;
-  parent?: { owner: { login: string }; name: string };
-  private: boolean;
-}
-
-export async function checkRepository(url: string, expectedLogin?: string): Promise<GitHubVerificationResult> {
-  const parsed = parseGitHubUrl(url);
-  if (!parsed) {
-    return { verified: false, needsReview: false, reason: "Not a valid GitHub repository URL", retryable: false };
-  }
-
-  let res: Response;
-  try {
-    res = await githubFetch(`/repos/${parsed.owner}/${parsed.repo}`);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("abort") || msg.includes("timeout")) {
-      return {
-        verified: false,
-        needsReview: false,
-        reason: "GitHub API request timed out",
-        retryable: true,
-        errorCategory: "network",
-      };
-    }
-    return {
-      verified: false,
-      needsReview: false,
-      reason: "Network error reaching GitHub API",
-      retryable: true,
-      errorCategory: "network",
-    };
-  }
-
-  // Handle error responses
-  if (res.status === 404) {
-    return {
-      verified: false,
-      needsReview: false,
-      reason: "Repository not found or private",
-      retryable: false,
-      errorCategory: "not_found",
-    };
-  }
-  if (res.status === 401) {
-    return {
-      verified: false,
-      needsReview: false,
-      reason: "GitHub API authentication failed",
-      retryable: false,
-      errorCategory: "auth",
-    };
-  }
-  if (res.status === 403) {
-    const rl = parseRateLimit(res);
-    if (rl.remaining === 0) {
-      logger.warn({ resetAt: rl.resetAt.toISOString() }, "GitHub API rate limit reached");
-      return {
-        verified: false,
-        needsReview: false,
-        reason: "GitHub API rate limit reached",
-        retryable: true,
-        errorCategory: "rate_limit",
-      };
-    }
-    return {
-      verified: false,
-      needsReview: false,
-      reason: "GitHub API access denied",
-      retryable: false,
-      errorCategory: "auth",
-    };
-  }
-  if (res.status === 429) {
-    return {
-      verified: false,
-      needsReview: false,
-      reason: "GitHub API secondary rate limit",
-      retryable: true,
-      errorCategory: "rate_limit",
-    };
-  }
-  if (res.status >= 500) {
-    return {
-      verified: false,
-      needsReview: false,
-      reason: `GitHub API server error (${res.status})`,
-      retryable: true,
-      errorCategory: "server",
-    };
-  }
-  if (!res.ok) {
-    return {
-      verified: false,
-      needsReview: false,
-      reason: `GitHub API error (${res.status})`,
-      retryable: false,
-      errorCategory: "malformed",
-    };
-  }
-
-  let repo: RepoResponse;
-  try {
-    repo = (await res.json()) as RepoResponse;
-  } catch {
-    return {
-      verified: false,
-      needsReview: false,
-      reason: "Malformed GitHub API response",
-      retryable: true,
-      errorCategory: "malformed",
-    };
-  }
-
-  const metadata: GitHubVerificationResult["metadata"] = {
-    owner: repo.owner.login,
-    name: repo.name,
-    createdAt: repo.created_at,
-    isFork: repo.fork,
-    defaultBranch: repo.default_branch,
-    parentOwner: repo.parent?.owner.login,
-  };
-
-  // Fork check: if the repo is a fork, we need substantial own commits
-  if (repo.fork) {
-    if (!expectedLogin) {
-      return {
-        verified: false,
-        needsReview: true,
-        reason: "Repository is a fork; ownership and contribution need manual review",
-        metadata,
-        retryable: false,
-      };
-    }
-  }
-
-  // Ownership check
-  if (expectedLogin) {
-    const ownerMatches = repo.owner.login.toLowerCase() === expectedLogin.toLowerCase();
-    if (!ownerMatches) {
-      return {
-        verified: false,
-        needsReview: true,
-        reason: `Repository owner "${repo.owner.login}" does not match expected "${expectedLogin}"`,
-        metadata,
-        retryable: false,
-      };
-    }
-  }
-
-  return {
-    verified: true,
-    needsReview: false,
-    reason: "Repository exists and ownership confirmed",
-    metadata,
-    retryable: false,
-  };
-}
-
-/* ────────────────── Commit authorship check ────────────────── */
-
-interface CommitResponse {
-  sha: string;
-  commit: {
-    author: { name: string; email: string; date: string };
-    committer: { name: string; email: string };
-  };
-  author?: { login: string } | null;
-  committer?: { login: string } | null;
-}
-
-/**
- * Checks commit authorship for a repository.
- * Uses the GitHub commits API to verify the student authored commits.
- *
- * @param owner - Repository owner
- * @param repo - Repository name
- * @param expectedLogin - The GitHub login to check for authorship
- * @param expectedEmail - Optional email to check against git commit author
- */
-export async function checkCommitAuthorship(
-  owner: string,
-  repo: string,
-  expectedLogin: string,
-  expectedEmail?: string,
-): Promise<GitHubVerificationResult["authorship"] & { reason: string; retryable: boolean }> {
-  let res: Response;
-  try {
-    // Get up to 100 recent commits
-    res = await githubFetch(`/repos/${owner}/${repo}/commits?per_page=100`);
-  } catch (_err) {
-    return {
-      totalCommits: 0,
-      authoredCommits: 0,
-      authorshipRatio: 0,
-      matched: false,
-      reason: "Network error checking commit authorship",
-      retryable: true,
-    };
-  }
-
-  if (!res.ok) {
-    return {
-      totalCommits: 0,
-      authoredCommits: 0,
-      authorshipRatio: 0,
-      matched: false,
-      reason: `GitHub commits API error (${res.status})`,
-      retryable: res.status >= 500 || res.status === 429,
-    };
-  }
-
-  let commits: CommitResponse[];
-  try {
-    commits = (await res.json()) as CommitResponse[];
-  } catch {
-    return {
-      totalCommits: 0,
-      authoredCommits: 0,
-      authorshipRatio: 0,
-      matched: false,
-      reason: "Malformed commits response",
-      retryable: true,
-    };
-  }
-
-  if (!Array.isArray(commits) || commits.length === 0) {
-    return {
-      totalCommits: 0,
-      authoredCommits: 0,
-      authorshipRatio: 0,
-      matched: false,
-      reason: "Repository has no commits",
-      retryable: false,
-    };
-  }
-
-  const loginLower = expectedLogin.toLowerCase();
-  const emailLower = expectedEmail?.toLowerCase();
-
-  let authoredCount = 0;
-  for (const c of commits) {
-    // Check GitHub linked author identity (most reliable)
-    if (c.author?.login?.toLowerCase() === loginLower) {
-      authoredCount++;
-      continue;
-    }
-    // Check git commit email
-    if (emailLower && c.commit.author.email.toLowerCase() === emailLower) {
-      authoredCount++;
-    }
-  }
-
-  const ratio = commits.length > 0 ? authoredCount / commits.length : 0;
-
-  return {
-    totalCommits: commits.length,
-    authoredCommits: authoredCount,
-    authorshipRatio: ratio,
-    matched: authoredCount > 0,
-    reason:
-      authoredCount > 0
-        ? `${authoredCount}/${commits.length} commits authored by ${expectedLogin}`
-        : `No commits found authored by ${expectedLogin}`,
-    retryable: false,
-  };
-}
-
-/* ──────── Full verification: repo + authorship + fork ──────── */
-
-/**
- * Performs a complete GitHub verification: repository check, commit authorship,
- * and fork analysis. Returns a composite result.
- */
-export async function verifyGitHub(
+export async function fetchRepoReport(
   url: string,
-  expectedLogin?: string,
-  expectedEmail?: string,
-): Promise<GitHubVerificationResult> {
-  // 1. Check repository existence and ownership
-  const repoResult = await checkRepository(url, expectedLogin);
-  if (!repoResult.verified && !repoResult.needsReview) {
-    return repoResult;
-  }
+  opts: { login?: string | null; token?: string; fetcher?: Fetcher } = {},
+): Promise<RepoReport> {
+  const fetcher = opts.fetcher ?? ((u, i) => fetch(u, i));
+  const parsed = parseRepoUrl(url);
+  if (!parsed) return { state: "not_found", httpStatus: 0, commitTimes: [] };
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "AspirEdge-verification/1.0",
+    ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+  };
+  const get = (path: string) => fetcher(`${API}${path}`, { headers, signal: AbortSignal.timeout(10_000) });
 
-  // 2. Check commit authorship (if we have an expected login and the repo exists)
-  if (expectedLogin && repoResult.metadata) {
-    const authorship = await checkCommitAuthorship(
-      repoResult.metadata.owner,
-      repoResult.metadata.name,
-      expectedLogin,
-      expectedEmail,
+  const res = await get(`/repos/${parsed.owner}/${parsed.repo}`);
+  if (res.status === 404) return { state: "not_found", httpStatus: 404, commitTimes: [] };
+  // Rate limits and outages are not a verdict about the repository: let the job retry.
+  if (!res.ok) return { state: "error", httpStatus: res.status, commitTimes: [] };
+  const repo = (await res.json()) as { full_name: string; owner: { login: string }; fork: boolean; created_at: string };
+  const report: RepoReport = {
+    state: "found",
+    httpStatus: 200,
+    fullName: repo.full_name,
+    ownerLogin: repo.owner.login,
+    fork: repo.fork,
+    createdAt: repo.created_at,
+    commitTimes: [],
+  };
+  if (opts.login) {
+    const commits = await get(
+      `/repos/${parsed.owner}/${parsed.repo}/commits?author=${encodeURIComponent(opts.login)}&per_page=100`,
     );
-
-    const result: GitHubVerificationResult = {
-      ...repoResult,
-      authorship: {
-        totalCommits: authorship.totalCommits,
-        authoredCommits: authorship.authoredCommits,
-        authorshipRatio: authorship.authorshipRatio,
-        matched: authorship.matched,
-      },
-    };
-
-    // Fork with substantial own commits is ok; fork with no own commits needs review
-    if (repoResult.metadata.isFork) {
-      if (authorship.authoredCommits === 0) {
-        return {
-          ...result,
-          verified: false,
-          needsReview: true,
-          reason: "Fork with no authored commits; needs manual review",
-        };
-      }
-      // Fork with own commits: still needs review per spec (forks need substantial own commits)
-      if (authorship.authorshipRatio < 0.1) {
-        return {
-          ...result,
-          verified: false,
-          needsReview: true,
-          reason: `Fork with only ${authorship.authoredCommits} authored commits (${(authorship.authorshipRatio * 100).toFixed(0)}%); needs review`,
-        };
-      }
+    if (commits.ok) {
+      const list = (await commits.json()) as { commit: { author: { date: string } } }[];
+      report.commitTimes = list.map((c) => c.commit.author.date);
+    } else if (commits.status !== 404 && commits.status !== 409) {
+      return { ...report, state: "error", httpStatus: commits.status };
     }
-
-    // No authored commits at all
-    if (!authorship.matched) {
-      return {
-        ...result,
-        verified: false,
-        needsReview: true,
-        reason: authorship.reason,
-      };
-    }
-
-    return {
-      ...result,
-      verified: true,
-      needsReview: false,
-      reason: `Repository verified: ${authorship.reason}`,
-    };
   }
+  return report;
+}
 
-  return repoResult;
+/** Commit pattern used by the burst-commit check (§6.3). */
+export function commitPattern(times: string[]): {
+  peakPerMinute: number;
+  share24h: number;
+  hadEarlierActivity: boolean;
+} {
+  const t = times
+    .map((x) => Date.parse(x))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  if (t.length === 0) return { peakPerMinute: 0, share24h: 0, hadEarlierActivity: false };
+  let peak = 0;
+  for (let i = 0, j = 0; i < t.length; i++) {
+    while (t[i] - t[j] >= 60_000) j++;
+    peak = Math.max(peak, i - j + 1);
+  }
+  let best = 0;
+  let bestStart = 0;
+  for (let i = 0, j = 0; i < t.length; i++) {
+    while (t[i] - t[j] > 86_400_000) j++;
+    if (i - j + 1 > best) {
+      best = i - j + 1;
+      bestStart = t[j];
+    }
+  }
+  return { peakPerMinute: peak, share24h: best / t.length, hadEarlierActivity: t.some((x) => x < bestStart) };
+}
+
+export interface RepoDecision {
+  status: VerificationStatus;
+  reason: string;
+  flags: IntegrityFlag[];
+}
+
+export function decideRepository(
+  report: RepoReport,
+  student: { verifiedLogin: string | null },
+  repoId: string,
+  policy: Pick<Policy, "verification" | "integrity">,
+): RepoDecision {
+  if (report.state === "not_found")
+    return {
+      status: "UNVERIFIED",
+      reason: "Repository not found, or it is private (private repositories are not readable without consent)",
+      flags: [],
+    };
+  const login = student.verifiedLogin?.toLowerCase() ?? null;
+  const owns = login != null && report.ownerLogin?.toLowerCase() === login;
+  const own = report.commitTimes.length;
+  const minOwn = report.fork ? policy.verification.github.fork_min_own_commits : 1;
+  const flags = (() => {
+    const p = commitPattern(report.commitTimes);
+    return burstCommits(p.peakPerMinute, p.share24h, p.hadEarlierActivity, repoId, policy as Policy);
+  })();
+
+  if (report.fork && !(login != null && own >= minOwn))
+    return {
+      status: login ? "UNVERIFIED" : "LIVE_UNVERIFIED",
+      reason: login
+        ? `A fork counts only with at least ${minOwn} commits of your own; found ${own}`
+        : "A fork counts only with commits of your own, which need your linked GitHub account to confirm",
+      flags,
+    };
+  if (owns || (login != null && own >= minOwn))
+    return {
+      status: "VERIFIED",
+      reason: owns
+        ? "GitHub API confirmed the repository belongs to your linked account"
+        : `GitHub API confirmed ${own} commits authored by your linked account`,
+      flags,
+    };
+  if (login)
+    return {
+      status: "UNVERIFIED",
+      reason: `The repository belongs to ${report.ownerLogin}, not your linked account, and has no commits by you`,
+      flags,
+    };
+  return {
+    status: "LIVE_UNVERIFIED",
+    reason: "The repository exists but ownership is not confirmed; link your GitHub account to confirm it",
+    flags,
+  };
 }

@@ -1,120 +1,110 @@
 /**
- * Leaderboards read model (§4.1, §12.1).
- *
- * Leaderboards are strictly opt-in (off by default) and can be reversed
- * at any time. Only students with an active opt-in appear here.
- * Tracks are tabbed, scores come from pure evaluations, and verified links
- * are shown as chips.
+ * Leaderboards (§12.1, §12.3): tabs per track, opted-in students only, off by default. Ranking is by verified
+ * effort (evidence that counts, and the practice streak), never by score or gap, and shows no persona, index or
+ * grade. Students appear under their pseudonymous ID; their verified public links appear as chips.
  */
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { cached } from "../cache";
 import { db } from "../db";
-import { artifacts, evaluations, leaderboardOptIns, students } from "../db/schema";
+import { artifacts, leaderboardOptIns, mockAttempts, students } from "../db/schema";
 import { getActivePolicy } from "../policy/load";
-import { TRACK_IDS, type TrackId } from "../policy/schema";
+import type { TrackId } from "../policy/schema";
+import { localDate } from "../rules/calendar";
+import { streakValidDays } from "../rules/integrity";
+import { multiplier } from "../rules/normalize";
+
+export type LeaderboardTab = "evidence" | "streak";
 
 export interface LeaderboardEntry {
   rank: number;
-  studentId: string;
-  pseudonymousId: string;
-  departmentCode: string;
-  year: number;
-  trackId: TrackId;
-  trackName: string;
-  score: number;
+  handle: string;
+  department: string;
+  points: number;
   streakDays: number;
-  verifiedArtifactsCount: number;
-  verifiedItems: { id: string; label: string; type: string }[];
+  streakBadge: boolean;
+  links: { host: string; url: string }[];
+  isYou: boolean;
 }
 
-export async function getLeaderboardData(selectedTrack?: string) {
-  const policy = getActivePolicy();
-  const tracks = Object.entries(policy.tracks).map(([id, t]) => ({
-    id: id as TrackId,
-    name: t.name,
-  }));
+const LINK_TYPES = new Set(["repository_check", "doi_or_preprint"]);
 
-  const activeTrack: TrackId =
-    selectedTrack && (TRACK_IDS as readonly string[]).includes(selectedTrack)
-      ? (selectedTrack as TrackId)
-      : (tracks[0]?.id ?? "corporate_placement");
-
-  // Query only students with optedIn = true
-  const optIns = await db
-    .select({
-      studentId: leaderboardOptIns.studentId,
-    })
+async function compute(track: TrackId, tab: LeaderboardTab, viewerStudentId: string | null, now: Date) {
+  const policy = await getActivePolicy();
+  const asOf = localDate(now, policy.calendar);
+  const opted = await db
+    .select({ id: students.id, handle: students.pseudonymousId, department: students.departmentCode })
     .from(leaderboardOptIns)
-    .where(eq(leaderboardOptIns.optedIn, true));
-
-  if (optIns.length === 0) {
-    return {
-      activeTrack,
-      tracks,
-      entries: [],
-      totalOptIns: 0,
-    };
-  }
-
-  const studentIds = optIns.map((o) => o.studentId);
-
-  // Fetch student info
-  const studentRows = await db.select().from(students).where(inArray(students.id, studentIds));
-
-  // For each student, get latest evaluation for the active track
-  const entries: LeaderboardEntry[] = [];
-
-  for (const s of studentRows) {
-    // Only include if declared track matches or if they have an evaluation on this track
-    const [latestEval] = await db
-      .select()
-      .from(evaluations)
-      .where(and(eq(evaluations.studentId, s.id), eq(evaluations.track, activeTrack)))
-      .orderBy(desc(evaluations.createdAt))
-      .limit(1);
-
-    if (!latestEval && s.declaredTrack !== activeTrack) {
-      continue;
-    }
-
-    const verifiedArtifacts = await db
-      .select({
-        id: artifacts.id,
-        label: artifacts.label,
-        type: artifacts.type,
-      })
-      .from(artifacts)
-      .where(and(eq(artifacts.studentId, s.id), inArray(artifacts.status, ["VERIFIED", "ATTESTED"])))
-      .limit(5);
-
-    const score = latestEval?.trackScore ?? (s.declaredTrack === activeTrack ? 0 : 0);
-
-    entries.push({
-      rank: 0, // Assigned after sorting
-      studentId: s.id,
-      pseudonymousId: s.pseudonymousId,
-      departmentCode: s.departmentCode,
-      year: s.year,
-      trackId: activeTrack,
-      trackName: policy.tracks[activeTrack]?.name ?? activeTrack,
-      score,
-      streakDays: s.signals?.streakValidDays ?? 0,
-      verifiedArtifactsCount: verifiedArtifacts.length,
-      verifiedItems: verifiedArtifacts,
-    });
-  }
-
-  // Sort descending by score, then by verifiedArtifactsCount
-  entries.sort((a, b) => b.score - a.score || b.verifiedArtifactsCount - a.verifiedArtifactsCount);
-
-  // Assign ranks
-  entries.forEach((e, i) => {
-    e.rank = i + 1;
+    .innerJoin(students, eq(students.id, leaderboardOptIns.studentId))
+    .where(and(eq(leaderboardOptIns.optedIn, true), eq(students.declaredTrack, track)));
+  if (opted.length === 0) return { entries: [] as LeaderboardEntry[], optedIn: 0 };
+  const ids = opted.map((o) => o.id);
+  const [arts, mocks] = await Promise.all([
+    db.select().from(artifacts).where(inArray(artifacts.studentId, ids)),
+    db.select().from(mockAttempts).where(inArray(mockAttempts.studentId, ids)),
+  ]);
+  const rows = opted.map((o) => {
+    const mine = arts.filter((a) => a.studentId === o.id);
+    const points = mine.reduce((n, a) => n + a.weight * multiplier(a.status, policy), 0);
+    const streakDays = streakValidDays(
+      mocks
+        .filter((m) => m.studentId === o.id)
+        .map((m) => ({
+          id: m.id,
+          testType: m.testType,
+          date: localDate(m.takenAt, policy.calendar),
+          items: m.items,
+          percentile: m.percentile,
+          avgSecondsPerItem: m.avgSecondsPerItem,
+          status: m.status,
+        })),
+      asOf,
+      policy,
+    );
+    const links = mine
+      .filter((a) => a.status === "VERIFIED" && a.sourceUrl && LINK_TYPES.has(a.type))
+      .map((a) => ({ host: new URL(a.sourceUrl as string).hostname.replace(/^www\./, ""), url: a.sourceUrl as string }))
+      .slice(0, 3);
+    return { o, points: Math.round(points * 10) / 10, streakDays, links };
   });
+  rows.sort(
+    (a, b) =>
+      (tab === "streak"
+        ? b.streakDays - a.streakDays || b.points - a.points
+        : b.points - a.points || b.streakDays - a.streakDays) || a.o.handle.localeCompare(b.o.handle),
+  );
+  const entries = rows.slice(0, 20).map((r, i) => ({
+    rank: i + 1,
+    handle: r.o.handle,
+    department: r.o.department,
+    points: r.points,
+    streakDays: r.streakDays,
+    streakBadge: r.streakDays >= policy.leaderboard.streak_badge_days,
+    links: r.links,
+    isYou: r.o.id === viewerStudentId,
+  }));
+  return { entries, optedIn: opted.length };
+}
 
-  return {
-    activeTrack,
-    tracks,
-    entries,
-    totalOptIns: optIns.length,
-  };
+/** Refreshed daily (§12.3): the computation is cached per track, tab and day; the viewer's own row is marked afterwards. */
+export async function leaderboard(
+  track: TrackId,
+  tab: LeaderboardTab,
+  viewerStudentId: string | null,
+  opts: { now?: Date; cache?: boolean } = {},
+) {
+  const now = opts.now ?? new Date();
+  const policy = await getActivePolicy();
+  const base =
+    opts.cache === false
+      ? await compute(track, tab, null, now)
+      : await cached(`leaderboard:${track}:${tab}:${localDate(now, policy.calendar)}`, 3600, () =>
+          compute(track, tab, null, now),
+        );
+  if (!viewerStudentId) return base;
+  const [me] = await db
+    .select({ handle: students.pseudonymousId })
+    .from(students)
+    .where(eq(students.id, viewerStudentId))
+    .limit(1);
+  return { ...base, entries: base.entries.map((e) => ({ ...e, isYou: e.handle === me?.handle })) };
 }

@@ -3,7 +3,7 @@
  * one decimal place. If one of these fails, the engine — not the test — is wrong.
  */
 import { describe, expect, it } from "vitest";
-import { loadPolicyFile } from "../../policy/load";
+import { loadPolicyFile } from "../../policy/file";
 import { addWorkingDays, toDateKey } from "../../services/time";
 import { evaluate, gapIndex, gapRatio, levelRank, round1, round2, scoreTrack, whatIf } from "..";
 import { CS_44, EE_12, ME_27, SEED_RECORDS } from "../fixtures";
@@ -107,6 +107,85 @@ describe("§20.4 Example C — EE-12 False-Positive High Flyer", () => {
     expect(e.routes[0].recipientRole).toBe("placement_officer");
     expect(Math.round(gapRatio(70, 52) * 1000) / 1000).toBe(0.257);
     expect(gapIndex(gapRatio(70, 52), policy)).toBe("MODERATE");
+  });
+  it("the fixture's own record reproduces a track score of 52 (within 0.1)", () => {
+    const e = evaluate(EE_12, policy);
+    expect(Math.abs(e.trackScore.score - 52)).toBeLessThan(0.1);
+    expect(e.gapIndex).toBe("MODERATE");
+    expect(e.aegIndex).toBe("MODERATE");
+    expect(e.routes[0]).toMatchObject({ routeKey: "false_positive_high_flyer", slaWorkingDays: 5, queued: false });
+  });
+});
+
+describe("§20.3 CS-44: the numbers behind the persona", () => {
+  const e = evaluate(CS_44, policy);
+  it("attendance falls 3 points a week and the artifact score beats the cohort 75th percentile", () => {
+    expect(e.trend.signals.attendance.slope).toBeCloseTo(-3, 9);
+    expect(CS_44.artifactScore).toBe(71);
+    expect(CS_44.cohortArtifactP75).toBe(66);
+    expect(e.personas[0].reasons.join(" ")).toMatch(/62%/);
+  });
+  it("does not set the attendance-critical flag, because the persona fired instead", () => {
+    expect(e.attendanceCriticalFlag).toBe(false);
+  });
+  it("below the artifact condition a student gets the attendance flag and no persona (§7.3)", () => {
+    const low = evaluate({ ...CS_44, artifactScore: 40 }, policy);
+    expect(low.primaryPersona).toBeNull();
+    expect(low.attendanceCriticalFlag).toBe(true);
+    expect(low.routes.map((r) => r.routeKey)).toEqual(["attendance_critical"]);
+  });
+});
+
+describe("Appendix D, record by record", () => {
+  const byId = Object.fromEntries(SEED_RECORDS.map((r) => [r.facts.studentId, evaluate(r.facts, policy)]));
+  it.each([
+    ["SYN-01", "false_positive_high_flyer", "MODERATE"],
+    ["SYN-02", null, "LOW"],
+    ["SYN-03", "detention_threat_builder", "CRITICAL"],
+    ["SYN-04", null, "MODERATE"],
+  ] as const)("%s → %s with index %s", (id, persona, index) => {
+    expect(byId[id].primaryPersona).toBe(persona);
+    expect(byId[id].aegIndex).toBe(index);
+  });
+  it.each(["SYN-05", "SYN-06", "SYN-07"])("%s carries a MODERATE floor at least (the gap may raise it)", (id) => {
+    expect(levelRank(byId[id].aegIndex)).toBeGreaterThanOrEqual(levelRank("MODERATE"));
+    expect(byId[id].personas[0].floor).toBe("MODERATE");
+  });
+  it("SYN-02 gets no coding penalty: its score uses Commerce items only", () => {
+    const gaps = byId["SYN-02"].trackScore.dataGaps.join(" ").toLowerCase();
+    expect(gaps).not.toMatch(/coding|deployed|repository/);
+    expect(byId["SYN-02"].trackScore.dataGaps.join(" ")).toMatch(/Statutory taxation/);
+  });
+  it("SYN-04 lists the pending GCP module as a data gap", () => {
+    expect(byId["SYN-04"].trackScore.dataGaps.join(" ")).toMatch(/Good Clinical Practice/);
+  });
+  it("SYN-06 has no declared track, so the passport score is not shown", () => {
+    expect(byId["SYN-06"].scoreShown).toBe(false);
+  });
+  it("routes follow precedence: one primary route, the rest queued (§7.4)", () => {
+    const both = evaluate(
+      {
+        ...EE_12,
+        attendancePct: 60,
+        artifactScore: 90,
+        cohortArtifactP75: 66,
+        year: 3,
+        aspiration: { ...EE_12.aspiration, targetType: "abroad" },
+        activeBacklogs: 3,
+        monthsToDeadline: 8,
+      },
+      policy,
+    );
+    expect(both.personas.map((p) => p.persona).sort()).toEqual([
+      "aspiration_mismatch",
+      "detention_threat_builder",
+      "false_positive_high_flyer",
+    ]);
+    expect(both.routes.map((r) => [r.routeKey, r.queued])).toEqual([
+      ["detention_threat_builder", false],
+      ["aspiration_mismatch", true],
+      ["false_positive_high_flyer", true],
+    ]);
   });
 });
 

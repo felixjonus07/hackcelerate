@@ -19,3 +19,6 @@ export const dateTime = (d: Date | string) =>
   }).format(new Date(d));
 
 export const firstName = (name: string) => name.replace(/^(Dr|Prof|Mr|Ms|Mrs)\.?\s+/i, "").split(/\s+/)[0];
+
+export const shortDate = (d: Date | string) =>
+  new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" }).format(new Date(d));

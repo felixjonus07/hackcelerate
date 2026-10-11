@@ -1,5 +1,5 @@
 {
-  "id": "fa8a79cc-d7c1-46e3-b4e7-5954bf60ab84",
+  "id": "a6d0e413-107f-4df9-bec2-09d09b90fc2a",
   "prevId": "89658ce4-2ceb-424a-b8d4-06a953e6d9d5",
   "version": "7",
   "dialect": "postgresql",
@@ -158,6 +158,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "file_checksum": {
           "name": "file_checksum",
           "type": "text",
@@ -166,15 +172,24 @@
         },
         "rows_total": {
           "name": "rows_total",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": 0
+        },
+        "rows_accepted": {
+          "name": "rows_accepted",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "rows_rejected": {
           "name": "rows_rejected",
-          "type": "text",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": 0
         },
         "status": {
           "name": "status",
@@ -1300,6 +1315,33 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "attendance_unique_week": {
+          "name": "attendance_unique_week",
+          "columns": [
+            {
+              "expression": "student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "course",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "week_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1626,6 +1668,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "max_score": {
+          "name": "max_score",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 100
+        },
         "percentile": {
           "name": "percentile",
           "type": "numeric(5, 2)",
@@ -1647,6 +1696,18 @@
         "item_kind": {
           "name": "item_kind",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quality_flag": {
+          "name": "quality_flag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "raw_answers": {
+          "name": "raw_answers",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -2344,8 +2405,34 @@
           "notNull": true,
           "default": "'[]'::jsonb"
         },
+        "requires_two_approvals": {
+          "name": "requires_two_approvals",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "changed_sections": {
+          "name": "changed_sections",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "supersedes": {
+          "name": "supersedes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "activated_at": {
           "name": "activated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retired_at": {
+          "name": "retired_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -2912,18 +2999,24 @@
           "primaryKey": false,
           "notNull": false
         },
-        "parental_consent_required": {
-          "name": "parental_consent_required",
+        "credits_held": {
+          "name": "credits_held",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erp_imported_at": {
+          "name": "erp_imported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erp_stale": {
+          "name": "erp_stale",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "parental_consent_at": {
-          "name": "parental_consent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         },
         "is_synthetic": {
           "name": "is_synthetic",

@@ -1,0 +1,90 @@
+name: Security
+
+# Phase 9 gate (PLAN.md, §15.1 "Security" row): dependency scanning, static analysis and an OWASP ZAP baseline
+# scan against the built application. The ZAP job fails the run on any high-severity alert.
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Runtime dependencies only; a high or critical advisory fails the run.
+      - run: npm audit --omit=dev --audit-level=high
+
+  codeql:
+    name: Static analysis (CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+
+  zap:
+    name: OWASP ZAP baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DEMO_LOGIN_ENABLED: "true"
+      DEMO_PASSWORD: ci-only-demo-password-1
+      BETTER_AUTH_SECRET: ci-only-secret-ci-only-secret-ci-only-0000
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: aspiredge
+          POSTGRES_PASSWORD: aspiredge
+          POSTGRES_DB: aspiredge
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U aspiredge -d aspiredge"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm run build
+      - name: Start the app
+        run: |
+          npm run start &
+          npx --yes wait-on http://localhost:3100/api/health --timeout 60000
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: http://localhost:3100
+          fail_action: true
+          allow_issue_writing: false
+          cmd_options: -a

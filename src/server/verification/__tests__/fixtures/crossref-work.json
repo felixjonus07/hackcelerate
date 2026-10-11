@@ -1,0 +1,28 @@
+{
+  "status": 200,
+  "body": {
+    "status": "ok",
+    "message": {
+      "DOI": "10.1038/nature14539",
+      "title": ["Deep learning"],
+      "author": [
+        {
+          "given": "Yann",
+          "family": "LeCun",
+          "sequence": "first"
+        },
+        {
+          "given": "Yoshua",
+          "family": "Bengio",
+          "sequence": "additional"
+        },
+        {
+          "given": "Geoffrey",
+          "family": "Hinton",
+          "sequence": "additional"
+        }
+      ],
+      "type": "journal-article"
+    }
+  }
+}

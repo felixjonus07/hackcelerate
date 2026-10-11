@@ -1,13 +1,17 @@
 "use client";
-/** Six-card onboarding (§12.1): notice → consent → baseline → ambition → evidence → passport. */
-import { Check, ShieldCheck } from "lucide-react";
-import Link from "next/link";
+/**
+ * Six-card onboarding (§12.1): notice → consent choices → baseline check → ambition → evidence → passport.
+ * The server keeps the notice acknowledgement and the card the student is on, so a refresh resumes here.
+ */
+import { Check } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useActionState, useOptimistic, useState, useTransition } from "react";
 import {
-  acknowledgeNotice,
+  acknowledgeNoticeAction,
+  completeOnboardingAction,
+  moveToCardAction,
   requestRight,
   saveAspiration,
-  submitGeneralEvidence,
   updateConsent,
 } from "@/app/student/actions";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -18,27 +22,24 @@ import type { ConsentCategory } from "@/server/db/schema/enums";
 
 const STEPS = ["What we collect", "Who sees it", "Your records", "Your ambition", "Your evidence", "Your passport"];
 
-const RECIPIENT_LABELS: Record<string, { title: string; desc: string }> = {
-  placement_officer: {
-    title: "Placement cell",
-    desc: "Share verified projects and academic baseline for campus placement drives.",
-  },
-  ecell_coordinator: {
-    title: "E-Cell coordinator",
-    desc: "Share startup ideas, pitch decks and incubation milestones.",
-  },
-  sports_officer: {
-    title: "Sports & NCC office",
-    desc: "Share competition records, attendance attestations and athletic medals.",
-  },
+const RECIPIENT_LABELS: Record<string, string> = {
+  placement_officer: "Placement cell",
+  ecell_coordinator: "E-Cell",
+  sports_officer: "Sports & NCC office",
 };
 
+type ConsentState = Record<string, Record<string, boolean>>;
+
 interface Props {
+  startStep: number;
+  noticeAcknowledged: boolean;
+  noticeVersion: string;
   baseline: {
     cgpa: number | null;
     attendance: number | null;
     year: number;
     department: string;
+    importedOn: string | null;
   } | null;
   aspiration: {
     track: string | null;
@@ -48,60 +49,57 @@ interface Props {
   } | null;
   tracks: { id: string; name: string }[];
   readinessDefault: number;
-  initialConsents?: Record<string, Record<string, boolean>>;
-  categories?: Record<string, string>;
-  recipients?: string[];
+  consent: ConsentState;
+  categories: Record<string, string>;
+  recipients: string[];
+  evidenceCount: number;
+  hasEvaluation: boolean;
 }
 
-export function OnboardingWizard({
-  baseline,
-  aspiration,
-  tracks,
-  readinessDefault,
-  initialConsents = {},
-  recipients = ["placement_officer", "ecell_coordinator", "sports_officer"],
-}: Props) {
-  const [step, setStep] = useState(0);
-  const [state, action, pending] = useActionState(saveAspiration, null);
-  const [evidenceState, evidenceAction, evidencePending] = useActionState(submitGeneralEvidence, null);
-  const [correction, setCorrection] = useState(false);
-  const [consentPending, startConsent] = useTransition();
-
-  const [consents, setConsents] = useOptimistic(
-    initialConsents,
-    (curr: Record<string, Record<string, boolean>>, update: { c: string; r: string; v: boolean }) => ({
-      ...curr,
-      [update.c]: { ...curr[update.c], [update.r]: update.v },
+export function OnboardingWizard(p: Props) {
+  const router = useRouter();
+  const [step, setStep] = useState(Math.min(p.startStep, STEPS.length - 1));
+  const [saved, action, savingAspiration] = useActionState(saveAspiration, null);
+  const [correction, setCorrection] = useState<string | null>(null);
+  const [acked, setAcked] = useState(p.noticeAcknowledged);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const [consent, setConsent] = useOptimistic(
+    p.consent,
+    (s: ConsentState, u: { c: string; r: string; v: boolean }) => ({
+      ...s,
+      [u.c]: { ...s[u.c], [u.r]: u.v },
     }),
   );
-
-  const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1));
-  const back = () => setStep((s) => Math.max(0, s - 1));
   const today = new Date().toISOString().slice(0, 10);
+  const ambitionSaved = saved?.ok ?? Boolean(p.aspiration);
 
-  const handleNoticeAck = async () => {
-    try {
-      await acknowledgeNotice();
-    } catch {
-      // optimistic advance
+  const go = (to: number) => {
+    setStep(to);
+    setProblem(null);
+    start(() => moveToCardAction(to));
+  };
+  const next = () => {
+    if (step === 0 && !acked) {
+      start(async () => {
+        await acknowledgeNoticeAction();
+        setAcked(true);
+        go(1);
+      });
+      return;
     }
-    next();
+    if (step === 3 && !ambitionSaved) {
+      setProblem("Save your ambition first, so we can score your first passport.");
+      return;
+    }
+    go(Math.min(STEPS.length - 1, step + 1));
   };
-
-  const toggleRecipientConsent = (recipientRole: string, granted: boolean) => {
-    startConsent(async () => {
-      // Toggle key academic categories for this recipient
-      const categoriesToToggle: ConsentCategory[] = ["academic_baseline", "artifacts_evidence"];
-      for (const cat of categoriesToToggle) {
-        setConsents({ c: cat, r: recipientRole, v: granted });
-        await updateConsent({
-          category: cat,
-          recipient: recipientRole as "placement_officer",
-          granted,
-        });
-      }
+  const finish = () =>
+    start(async () => {
+      const r = await completeOnboardingAction();
+      if (!r.ok) return setProblem(r.message);
+      router.push("/student/passport");
     });
-  };
 
   return (
     <div className="mx-auto max-w-[720px]">
@@ -113,10 +111,7 @@ export function OnboardingWizard({
               aria-hidden
               className={cn("h-1.5 rounded-full transition-colors", i <= step ? "bg-act" : "bg-sand-3")}
             />
-            <span
-              className={cn("hidden text-xs font-bold sm:block", i === step ? "text-ink" : "text-ink-2")}
-              aria-current={i === step ? "step" : undefined}
-            >
+            <span className={cn("hidden text-xs font-bold sm:block", i === step ? "text-ink" : "text-ink-2")}>
               {label}
             </span>
           </li>
@@ -145,86 +140,92 @@ export function OnboardingWizard({
             </ul>
             <p className="text-ink-2">
               Nothing is collected on this screen. Your score is calculated by fixed rules, and a mentor approves every
-              suggestion before it reaches you.
+              suggestion before it reaches you. You can ask to see, correct or erase your data at any time from Sharing.
+              (Notice {p.noticeVersion}.)
             </p>
           </div>
         )}
 
         {step === 1 && (
           <div className="mt-4 grid gap-4">
-            <p className="text-[0.98rem]">
-              By default only your assigned mentor sees your record. You can grant access to specific offices below, and
-              change your choices at any time in{" "}
-              <Link href="/student/consent" className="font-bold text-act underline">
-                Sharing
-              </Link>
-              .
+            <p>
+              Your assigned mentor always sees your record. The offices below see nothing until you switch it on, and
+              you can change it any time in Sharing.
             </p>
-
-            <div className="grid gap-3">
-              {recipients.map((r) => {
-                const info = RECIPIENT_LABELS[r] ?? { title: r, desc: `Share records with ${r}` };
-                const isShared = Boolean(consents.academic_baseline?.[r] || consents.artifacts_evidence?.[r]);
-                return (
-                  <div
-                    key={r}
-                    className="flex items-center justify-between gap-4 rounded-2xl bg-sand p-4 transition-colors"
-                  >
-                    <div>
-                      <p className="font-extrabold">{info.title}</p>
-                      <p className="text-sm text-ink-2">{info.desc}</p>
-                    </div>
-                    <Switch
-                      label={`Share with ${info.title}`}
-                      checked={isShared}
-                      pending={consentPending}
-                      onChange={(v) => toggleRecipientConsent(r, v)}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-            <p className="text-xs text-ink-2">
-              <ShieldCheck aria-hidden className="inline mr-1 size-4 text-low align-text-bottom" />
-              Mentor access is always active as part of academic guidance. Support flags are never shared with employers
-              or external offices.
-            </p>
+            <ul className="divide-y divide-line">
+              {Object.entries(p.categories).map(([c, label]) => (
+                <li key={c} className="py-3">
+                  <p className="font-semibold">{label}</p>
+                  <ul className="mt-1.5 grid gap-1">
+                    {p.recipients.map((r) => (
+                      <li key={r} className="flex items-center justify-between gap-3">
+                        <span className="text-ink-2">{RECIPIENT_LABELS[r] ?? r}</span>
+                        <Switch
+                          label={`Share ${label} with ${RECIPIENT_LABELS[r] ?? r}`}
+                          checked={consent[c]?.[r] ?? false}
+                          onChange={(v) =>
+                            start(async () => {
+                              setConsent({ c, r, v });
+                              await updateConsent({
+                                category: c as ConsentCategory,
+                                recipient: r as "placement_officer",
+                                granted: v,
+                              });
+                            })
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
         {step === 2 && (
           <div className="mt-4">
-            {baseline ? (
-              <dl className="tabular grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {[
-                  ["Department", baseline.department],
-                  ["Year", String(baseline.year)],
-                  ["CGPA", baseline.cgpa?.toFixed(2) ?? "Missing"],
-                  ["Attendance", baseline.attendance != null ? `${baseline.attendance}%` : "Missing"],
-                ].map(([k, v]) => (
-                  <div key={k} className="rounded-2xl bg-sand p-3">
-                    <dt className="text-sm text-ink-2">{k}</dt>
-                    <dd className="text-lg font-extrabold">{v}</dd>
-                  </div>
-                ))}
-              </dl>
+            {p.baseline ? (
+              <>
+                <dl className="tabular grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    ["Department", p.baseline.department],
+                    ["Year", String(p.baseline.year)],
+                    ["CGPA", p.baseline.cgpa?.toFixed(2) ?? "Missing"],
+                    ["Attendance", p.baseline.attendance != null ? `${p.baseline.attendance}%` : "Missing"],
+                  ].map(([k, v]) => (
+                    <div key={k} className="rounded-2xl bg-sand p-3">
+                      <dt className="text-sm text-ink-2">{k}</dt>
+                      <dd className="text-lg font-extrabold">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {p.baseline.importedOn ? (
+                  <p className="mt-3 text-sm text-ink-2">
+                    From the university records imported on {p.baseline.importedOn}.
+                  </p>
+                ) : null}
+              </>
             ) : (
               <p className="rounded-2xl bg-mod-bg p-4 font-semibold text-mod">
                 We couldn't find your university record yet. Request a correction and the registrar will check it.
               </p>
             )}
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               className="mt-4"
-              disabled={correction}
+              disabled={pending || correction !== null}
               onClick={() =>
-                requestRight("correction", "Baseline check during onboarding").then(() => setCorrection(true))
+                start(async () => {
+                  const r = await requestRight("correction", "Baseline check during onboarding");
+                  setCorrection(r.message);
+                })
               }
             >
               {correction ? "Correction requested" : "Something looks wrong? Request a correction"}
             </Button>
+            {correction ? <output className="mt-2 block text-sm font-semibold text-low">{correction}</output> : null}
           </div>
         )}
 
@@ -234,14 +235,14 @@ export function OnboardingWizard({
               Track
               <select
                 name="track"
-                defaultValue={aspiration?.track ?? ""}
+                defaultValue={p.aspiration?.track ?? ""}
                 required
                 className="h-11 rounded-field border border-line bg-card px-3 text-base font-normal"
               >
                 <option value="" disabled>
                   Choose a track
                 </option>
-                {tracks.map((t) => (
+                {p.tracks.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
                   </option>
@@ -255,7 +256,7 @@ export function OnboardingWizard({
                 required
                 minLength={3}
                 maxLength={200}
-                defaultValue={aspiration?.targetOutcome ?? ""}
+                defaultValue={p.aspiration?.targetOutcome ?? ""}
                 placeholder="For example: an offer from a core mechanical employer"
                 className="h-11 rounded-field border border-line bg-card px-3.5 text-base font-normal"
               />
@@ -268,7 +269,7 @@ export function OnboardingWizard({
                   type="date"
                   min={today}
                   required
-                  defaultValue={aspiration?.targetDate ?? ""}
+                  defaultValue={p.aspiration?.targetDate ?? ""}
                   className="h-11 rounded-field border border-line bg-card px-3.5 text-base font-normal"
                 />
               </label>
@@ -279,118 +280,72 @@ export function OnboardingWizard({
                   type="number"
                   min={40}
                   max={100}
-                  defaultValue={aspiration?.readiness ?? readinessDefault}
+                  defaultValue={p.aspiration?.readiness ?? p.readinessDefault}
                   className="tabular h-11 rounded-field border border-line bg-card px-3.5 text-base font-normal"
                 />
               </label>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving…" : "Save ambition"}
+              <Button type="submit" disabled={savingAspiration}>
+                {savingAspiration ? "Saving…" : ambitionSaved ? "Save changes" : "Save ambition"}
               </Button>
-              {state?.ok ? (
-                <div className="flex items-center gap-3">
-                  <output className="text-sm font-semibold text-low">{state.message}</output>
-                  <Button type="button" size="sm" onClick={next}>
-                    Continue to evidence
-                  </Button>
-                </div>
-              ) : state ? (
-                <output className="text-sm font-semibold text-crit">{state.message}</output>
+              {saved ? (
+                <output className={cn("text-sm font-semibold", saved.ok ? "text-low" : "text-crit")}>
+                  {saved.message}
+                </output>
               ) : null}
             </div>
           </form>
         )}
 
         {step === 4 && (
-          <div className="mt-4 grid gap-4">
-            <p className="text-[0.98rem]">
-              Add links to your work, certificates, repositories or internship letters. Verified items count at full
-              weight; self-reported items at half.
+          <div className="mt-4 grid gap-3">
+            <p>
+              Add links to your work, certificates and internship letters. Each item shows its status as it's checked:
+              verified items count at full weight.
             </p>
-
-            <form action={evidenceAction} className="grid gap-3 rounded-2xl bg-sand p-4">
-              <p className="font-extrabold text-sm">Add initial evidence</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="grid gap-1 text-sm font-bold">
-                  Evidence title
-                  <input
-                    name="label"
-                    required
-                    minLength={3}
-                    maxLength={200}
-                    placeholder="e.g. GitHub Robotics Repo, CAD Certificate"
-                    className="h-10 rounded-field border border-line bg-card px-3 text-sm font-normal"
-                  />
-                </label>
-                <label className="grid gap-1 text-sm font-bold">
-                  Type
-                  <select
-                    name="type"
-                    defaultValue="portfolio"
-                    className="h-10 rounded-field border border-line bg-card px-3 text-sm font-normal"
-                  >
-                    <option value="repository">Repository / Code (GitHub)</option>
-                    <option value="doi">Publication / DOI</option>
-                    <option value="portfolio">Portfolio project</option>
-                    <option value="certificate">Course certificate</option>
-                    <option value="letter">Internship letter</option>
-                  </select>
-                </label>
-              </div>
-              <label className="grid gap-1 text-sm font-bold">
-                Source link (HTTPS)
-                <input
-                  name="sourceUrl"
-                  type="url"
-                  required
-                  placeholder="https://github.com/... or https://..."
-                  className="h-10 rounded-field border border-line bg-card px-3 text-sm font-normal"
-                />
-              </label>
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <Button type="submit" size="sm" disabled={evidencePending}>
-                  {evidencePending ? "Submitting…" : "Submit evidence"}
-                </Button>
-                {evidenceState ? (
-                  <output className={cn("text-sm font-semibold", evidenceState.ok ? "text-low" : "text-crit")}>
-                    {evidenceState.message}
-                  </output>
-                ) : null}
-              </div>
-            </form>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <ButtonLink href="/student/quests" variant="secondary" className="w-fit">
-                View suggested quests
-              </ButtonLink>
-            </div>
+            <p className="text-ink-2">
+              {p.evidenceCount > 0
+                ? `You've added ${p.evidenceCount} ${p.evidenceCount === 1 ? "item" : "items"} so far.`
+                : "You can skip this now. Your first passport shows what to add."}
+            </p>
+            <ButtonLink href="/student/quests" variant="secondary" className="w-fit">
+              Add evidence
+            </ButtonLink>
           </div>
         )}
 
         {step === 5 && (
           <div className="mt-4 grid gap-3">
-            <p className="text-[0.98rem]">
-              Setup complete! Your ambition is recorded, baseline verified, and your initial passport score has been
-              calculated according to fixed institutional policy.
+            <p>
+              Your passport shows your score, the gap to your target and up to three suggested quests. Accept, edit or
+              put off each one.
             </p>
-            <p className="text-ink-2 text-sm">
-              Your mentor will review your profile and propose actionable next steps tailored to your career track.
-            </p>
-            <div className="pt-2">
-              <ButtonLink href="/student/passport" className="w-fit">
-                Open my passport
-              </ButtonLink>
-            </div>
+            {problem ? (
+              <p role="alert" className="text-sm font-semibold text-crit">
+                {problem}
+              </p>
+            ) : null}
+            <Button className="w-fit" disabled={pending} onClick={finish}>
+              {pending ? "Opening…" : "Open my passport"}
+            </Button>
           </div>
         )}
 
+        {step !== 5 && problem ? (
+          <p role="alert" className="mt-4 text-sm font-semibold text-crit">
+            {problem}
+          </p>
+        ) : null}
+
         <div className="mt-8 flex justify-between border-t border-line pt-5">
-          <Button variant="ghost" onClick={back} disabled={step === 0}>
+          <Button variant="ghost" onClick={() => go(Math.max(0, step - 1))} disabled={step === 0 || pending}>
             Back
           </Button>
           {step < STEPS.length - 1 ? (
-            <Button onClick={step === 0 ? handleNoticeAck : next}>{step === 0 ? "I understand" : "Continue"}</Button>
+            <Button onClick={next} disabled={pending}>
+              {step === 0 && !acked ? "I understand" : "Continue"}
+            </Button>
           ) : null}
         </div>
       </Card>

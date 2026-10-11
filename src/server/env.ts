@@ -1,22 +1,21 @@
 /** Validated environment. Import from server code and workers only. */
 import { z } from "zod";
 
-const bool = (defaultVal = false) =>
-  z
-    .enum(["true", "false", "1", "0", ""])
-    .optional()
-    .transform((v) => (v === undefined || v === "" ? defaultVal : v === "true" || v === "1"));
+const bool = z
+  .enum(["true", "false", "1", "0", ""])
+  .optional()
+  .transform((v) => v === "true" || v === "1");
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_URL: z.url().default("http://localhost:3100"),
   DATABASE_URL: z.string().default("postgres://aspiredge:aspiredge@localhost:5434/aspiredge"),
   REDIS_URL: z.string().default("redis://localhost:6380"),
-  BETTER_AUTH_SECRET: z.string().min(1).default("dev-only-secret-change-me-0000000000000000"),
+  BETTER_AUTH_SECRET: z.string().min(32).default("dev-only-secret-change-me-0000000000000000"),
   BETTER_AUTH_URL: z.url().default("http://localhost:3100"),
-  DEMO_LOGIN_ENABLED: bool(true),
+  DEMO_LOGIN_ENABLED: bool,
   /** Demo accounts are refused in production unless this is also set. */
-  ALLOW_DEMO_LOGIN_IN_PRODUCTION: bool(true),
+  ALLOW_DEMO_LOGIN_IN_PRODUCTION: bool,
   /** Header your reverse proxy sets with the client IP (used for rate limiting). */
   TRUSTED_IP_HEADER: z.string().default("x-forwarded-for"),
   // Session timeouts (§13.2). Idle = no request for this long; max = absolute lifetime.
@@ -44,49 +43,42 @@ const schema = z.object({
   GITHUB_TOKEN: z.string().optional().default(""),
   CROSSREF_MAILTO: z.string().optional().default(""),
   POLICY_FILE: z.string().default("policy/2026.10-v1.json"),
-  // S3-compatible object storage for evidence uploads (§13.3, Phase 3).
-  // All five must be set for S3; otherwise a local filesystem fallback is used.
+  // Object storage (§13.3): an S3-compatible private bucket. Leave blank in development to use local files.
   S3_ENDPOINT: z.string().optional().default(""),
+  S3_REGION: z.string().default("ap-south-1"),
   S3_BUCKET: z.string().optional().default(""),
-  S3_REGION: z.string().optional().default(""),
   S3_ACCESS_KEY_ID: z.string().optional().default(""),
   S3_SECRET_ACCESS_KEY: z.string().optional().default(""),
+  S3_FORCE_PATH_STYLE: bool,
+  /**
+   * Shadow mode (§16.2): the system scores everyone but shows its outputs only to the project team, nothing is
+   * dispatched, and mentors keep working as usual so their decisions can be compared with the system's.
+   */
+  SHADOW_MODE: bool,
+  /** Comma-separated emails of the project team, who may see outputs in shadow mode. */
+  PROJECT_TEAM_EMAILS: z.string().optional().default(""),
+  // Notifications (§10.1). Blank = email goes to .local-data/outbox and WhatsApp is off.
+  NOTIFY_EMAIL_WEBHOOK_URL: z.string().optional().default(""),
+  WHATSAPP_PHONE_ID: z.string().optional().default(""),
+  WHATSAPP_TOKEN: z.string().optional().default(""),
+  /** GitHub OAuth app that proves repository ownership (§6.2). Both blank = linking is off. */
+  GITHUB_CLIENT_ID: z.string().optional().default(""),
+  GITHUB_CLIENT_SECRET: z.string().optional().default(""),
+  /** The registrar's nightly ERP export (CSV). Empty = no import is configured (§6.2). */
+  ERP_EXPORT_FILE: z.string().optional().default(""),
 });
 
 const DEV_SECRET = "dev-only-secret-change-me-0000000000000000";
 
-/**
- * Set SKIP_ENV_VALIDATION=1 or detect Next.js build phase to bypass validation
- * during CI/CD builds where runtime env vars are not needed to collect routes.
- * Validation still runs at runtime on the actual server.
- */
-const skipValidation =
-  process.env.SKIP_ENV_VALIDATION === "1" ||
-  process.env.NEXT_PHASE === "phase-production-build" ||
-  process.env.npm_lifecycle_event === "build";
-
-function parseEnv(): z.infer<typeof schema> {
-  const result = schema.safeParse(process.env);
-  if (result.success) {
-    if (result.data.NODE_ENV === "production" && result.data.BETTER_AUTH_SECRET === DEV_SECRET && !skipValidation) {
-      throw new Error("Set BETTER_AUTH_SECRET in production (openssl rand -base64 32)");
-    }
-    return result.data;
-  }
-  if (skipValidation) {
-    return schema.parse({});
-  }
-  return schema
-    .refine((e) => e.NODE_ENV !== "production" || e.BETTER_AUTH_SECRET !== DEV_SECRET, {
-      message: "Set BETTER_AUTH_SECRET in production (openssl rand -base64 32)",
-    })
-    .parse(process.env);
-}
-
-export const env = parseEnv();
-
+export const env = schema
+  .refine((e) => e.NODE_ENV !== "production" || e.BETTER_AUTH_SECRET !== DEV_SECRET, {
+    message: "Set BETTER_AUTH_SECRET in production (openssl rand -base64 32)",
+  })
+  .parse(process.env);
 export const demoLoginEnabled =
-  !skipValidation && env.DEMO_LOGIN_ENABLED && (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
+  env.DEMO_LOGIN_ENABLED && (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
 export const isProduction = env.NODE_ENV === "production";
 export const oidcEnabled = Boolean(env.OIDC_DISCOVERY_URL && env.OIDC_CLIENT_ID);
+export const s3Enabled = Boolean(env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY);
+export const githubOAuthEnabled = Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET);
 export const llmEnabled = Boolean(env.OPENROUTER_API_KEY);

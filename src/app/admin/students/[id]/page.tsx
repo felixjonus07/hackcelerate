@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import { runEval } from "@/app/admin/actions";
 import { PageHeader } from "@/components/shell/app-shell";
 import { ComponentRadar } from "@/components/staff/component-radar";
-import { MentorGuidanceCard } from "@/components/staff/mentor-brief";
 import { NarrativeText } from "@/components/staff/narrative-text";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -92,7 +91,7 @@ async function Record({ params, searchParams }: Props) {
       />
       {ev ? (
         <div className="grid gap-5 lg:grid-cols-2">
-          <Card>
+          <Card id="score">
             <CardHeader
               title="Summary"
               hint={`Policy ${ev.policyVersion} · engine ${ev.engineVersion} · ${dateTime(ev.createdAt)}`}
@@ -103,6 +102,21 @@ async function Record({ params, searchParams }: Props) {
               <GapTag level={ev.aegIndex} audience="staff" />
               <TrendTag trend={ev.trend} />
             </div>
+            {ev.result.personas.length ? (
+              <div id="personas" className="mt-5">
+                <h3 className="font-extrabold">What triggered the route</h3>
+                <ul className="mt-1.5 list-disc pl-5 text-[0.95rem] text-ink-2">
+                  {ev.result.personas
+                    .flatMap((p) => p.reasons)
+                    .map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                </ul>
+              </div>
+            ) : null}
+            <p id="trend" className="mt-4 text-sm text-ink-2">
+              Trend over four weeks: {ev.trend.toLowerCase().replaceAll("_", " ")}.
+            </p>
             {ev.narrative ? (
               <div className="mt-5 grid gap-2 text-[0.95rem]">
                 {ev.fallback ? (
@@ -114,7 +128,7 @@ async function Record({ params, searchParams }: Props) {
               </div>
             ) : null}
           </Card>
-          <Card>
+          <Card id="components">
             <CardHeader title="Components" hint="Score per component, 0–100" />
             <ComponentRadar
               data={ev.result.trackScore.components.map((c) => ({
@@ -123,7 +137,6 @@ async function Record({ params, searchParams }: Props) {
               }))}
             />
           </Card>
-          <MentorGuidanceCard brief={brief} />
           <Card>
             <CardHeader title="Evidence" />
             {brief.evidence.length ? (

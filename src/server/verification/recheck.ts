@@ -1,217 +1,99 @@
 /**
- * Recheck scheduler (§6.2, §15).
- *
- * - Runs as a repeatable BullMQ job via the maintenance queue.
- * - Finds VERIFIED and LIVE_UNVERIFIED artifacts due for a recheck (every 30 days).
- * - Enqueues them for re-verification.
- * - STALE after one failed recheck; UNVERIFIED after two failures (§15).
- *
- * The recheck state machine:
- *   VERIFIED → (fail) → STALE → (fail) → UNVERIFIED
- *   VERIFIED → (fail) → STALE → (pass) → VERIFIED
+ * Scheduled evidence maintenance (§6.1, §6.2): re-check what is due, let lapsed attestations go
+ * STALE, and sample external score reports each term. Run by the maintenance worker.
  */
-import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, eq, inArray, isNotNull, isNull, lte } from "drizzle-orm";
+import { audit } from "../audit/log";
 import { db } from "../db";
-import { artifacts } from "../db/schema";
-import { logger } from "../logger";
+import { artifacts, mockAttempts } from "../db/schema";
+import { getActivePolicy } from "../policy/load";
 import { enqueue } from "../queue";
-import { getRealDeps, LifecycleError, transitionArtifact } from "./lifecycle";
+import { applyTransition } from "./apply";
+import { doiFrom } from "./claims";
+import type { VerifyKind } from "./index";
+import { attestationExpired } from "./lifecycle";
 
-/* ────────────────── Constants ────────────────── */
+/** Which automatic check an artifact needs, from its evidence type and link. */
+export function verifyKindFor(
+  a: { type: string; sourceUrl: string | null },
+  catalog: Record<string, { verifier?: string }>,
+): VerifyKind | null {
+  const v = catalog[a.type]?.verifier;
+  if (v === "github" || v === "link" || v === "certificate") return v;
+  if (v === "crossref") return a.sourceUrl && doiFrom(a.sourceUrl) ? "crossref" : "link";
+  if (!a.sourceUrl) return null;
+  return /github\.com\//i.test(a.sourceUrl)
+    ? "github"
+    : doiFrom(a.sourceUrl) && /doi/i.test(a.sourceUrl)
+      ? "crossref"
+      : "link";
+}
 
-/** Statuses that are subject to periodic rechecks. */
-const RECHECKABLE_STATUSES = ["VERIFIED", "LIVE_UNVERIFIED", "ATTESTED"] as const;
-
-/** How often to recheck (30 days per §6.2). */
-const RECHECK_INTERVAL_DAYS = 30;
-
-/** Maximum artifacts to queue per scheduler run. */
-const BATCH_SIZE = 100;
-
-/* ────────────────── Recheck runner ────────────────── */
-
-/**
- * Finds artifacts due for recheck and enqueues them.
- * Called by the maintenance worker when task = "recheck_evidence".
- */
-export async function runRecheckScheduler(): Promise<{ queued: number; skipped: number }> {
-  const cutoff = new Date(Date.now() - RECHECK_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
-
-  // Find artifacts that:
-  // 1. Are in a recheckable status
-  // 2. Were last verified/checked before the cutoff
-  // 3. Have a source URL (can be re-checked)
-  const dueArtifacts = await db
-    .select({
-      id: artifacts.id,
-      status: artifacts.status,
-      type: artifacts.type,
-      sourceUrl: artifacts.sourceUrl,
-    })
+/** Queue a verification job for every artifact whose check is due (new, retrying or periodic). */
+export async function queueDueRechecks(now = new Date()): Promise<number> {
+  const policy = await getActivePolicy();
+  const due = await db
+    .select()
     .from(artifacts)
     .where(
       and(
-        inArray(artifacts.status, [...RECHECKABLE_STATUSES]),
-        or(
-          lt(artifacts.verifiedAt, cutoff),
-          // Also pick up artifacts that have never had verifiedAt set
-          // (shouldn't happen for VERIFIED, but defensive)
-          sql`${artifacts.verifiedAt} IS NULL`,
-        ),
-        sql`${artifacts.sourceUrl} IS NOT NULL AND ${artifacts.sourceUrl} != ''`,
+        isNotNull(artifacts.nextCheckAt),
+        lte(artifacts.nextCheckAt, now),
+        inArray(artifacts.status, ["UNDER_CHECK", "VERIFIED", "LIVE_UNVERIFIED", "STALE"]),
       ),
-    )
-    .limit(BATCH_SIZE);
-
+    );
   let queued = 0;
-  let skipped = 0;
-
-  for (const a of dueArtifacts) {
-    // Determine the verification kind from the artifact
-    const kind = inferVerificationKind(a.type, a.sourceUrl);
-    if (!kind) {
-      skipped++;
-      continue;
-    }
-
-    try {
-      await enqueue(
-        "verification",
-        {
-          artifactId: a.id,
-          kind,
-          attempt: 1,
-        },
-        `recheck-${a.id}`, // dedup by artifact ID
-      );
-      queued++;
-    } catch (err) {
-      // BullMQ throws if a job with this ID already exists — that's fine
-      logger.debug({ artifactId: a.id, err: String(err) }, "recheck already queued");
-      skipped++;
-    }
+  for (const a of due) {
+    const kind = verifyKindFor(a, policy.evidence_types);
+    if (!kind || kind === "certificate") continue;
+    await enqueue("verification", { artifactId: a.id, kind }, `recheck-${a.id}-${now.toISOString().slice(0, 10)}`);
+    queued++;
   }
-
-  logger.info(
-    { queued, skipped, total: dueArtifacts.length, cutoffDate: cutoff.toISOString() },
-    "recheck scheduler run complete",
-  );
-
-  return { queued, skipped };
+  return queued;
 }
 
-/* ────────────────── Recheck outcome handler ────────────────── */
+/** Attestations lapse to STALE after their review period (§6.1). */
+export async function expireAttestations(now = new Date()): Promise<number> {
+  const policy = await getActivePolicy();
+  const rows = await db
+    .select()
+    .from(artifacts)
+    .where(and(eq(artifacts.status, "ATTESTED"), isNotNull(artifacts.attestedAt)));
+  let n = 0;
+  for (const a of rows) {
+    if (!a.attestedAt || !attestationExpired(a.attestedAt, now, policy)) continue;
+    await applyTransition(a.id, "STALE", { kind: "system" }, "The attestation's review period has passed", { now });
+    n++;
+  }
+  return n;
+}
+
+/** Deterministic 0–1 value from a key, so the same term always samples the same reports. */
+export const sampleValue = (key: string) =>
+  Number.parseInt(createHash("sha256").update(key).digest("hex").slice(0, 8), 16) / 0xffffffff;
 
 /**
- * Handles the outcome of a recheck. Called after a verification worker
- * processes a recheck job.
- *
- * §15 rules:
- * - STALE after one failed recheck
- * - UNVERIFIED after two consecutive failures
- * - Back to VERIFIED after a passing recheck
+ * Pick the share of external score reports to check against the test body this term (§6.2).
+ * Reports are chosen by hashing their id with the term, so a rerun picks the same ones.
  */
-export async function handleRecheckOutcome(
-  artifactId: string,
-  passed: boolean,
-  reason: string,
-): Promise<{ newStatus: string }> {
-  const [a] = await db
-    .select({ id: artifacts.id, status: artifacts.status })
-    .from(artifacts)
-    .where(eq(artifacts.id, artifactId))
-    .limit(1);
-
-  if (!a) return { newStatus: "unknown" };
-
-  const currentStatus = a.status;
-
-  if (passed) {
-    // Successful recheck: restore to VERIFIED
-    if (currentStatus === "STALE") {
-      try {
-        await transitionArtifact(
-          {
-            artifactId,
-            toStatus: "VERIFIED",
-            actorId: "recheck-worker",
-            actorKind: "system",
-            reason: `Recheck passed: ${reason}`,
-            expectedFromStatus: "STALE",
-          },
-          getRealDeps(),
-        );
-        return { newStatus: "VERIFIED" };
-      } catch (err) {
-        if (err instanceof LifecycleError) {
-          logger.warn({ artifactId, code: err.code }, "recheck transition skipped");
-        }
-        return { newStatus: currentStatus };
-      }
-    }
-    // Already VERIFIED or other status — no-op
-    return { newStatus: currentStatus };
-  }
-
-  // Failed recheck
-  if (currentStatus === "VERIFIED" || currentStatus === "LIVE_UNVERIFIED" || currentStatus === "ATTESTED") {
-    // First failure → STALE
-    try {
-      const targetStatus = "STALE";
-      await transitionArtifact(
-        {
-          artifactId,
-          toStatus: targetStatus,
-          actorId: "recheck-worker",
-          actorKind: "system",
-          reason: `Recheck failed (1st): ${reason}`,
-        },
-        getRealDeps(),
-      );
-      return { newStatus: "STALE" };
-    } catch (err) {
-      if (err instanceof LifecycleError) {
-        logger.warn({ artifactId, code: err.code }, "recheck transition skipped");
-      }
-      return { newStatus: currentStatus };
-    }
-  }
-
-  if (currentStatus === "STALE") {
-    // Second failure → UNVERIFIED
-    try {
-      await transitionArtifact(
-        {
-          artifactId,
-          toStatus: "UNVERIFIED",
-          actorId: "recheck-worker",
-          actorKind: "system",
-          reason: `Recheck failed (2nd consecutive): ${reason}`,
-          expectedFromStatus: "STALE",
-        },
-        getRealDeps(),
-      );
-      return { newStatus: "UNVERIFIED" };
-    } catch (err) {
-      if (err instanceof LifecycleError) {
-        logger.warn({ artifactId, code: err.code }, "recheck transition skipped");
-      }
-      return { newStatus: currentStatus };
-    }
-  }
-
-  return { newStatus: currentStatus };
-}
-
-/* ────────────────── Kind inference ────────────────── */
-
-function inferVerificationKind(_artifactKind: string, sourceUrl: string | null): "github" | "crossref" | "link" | null {
-  if (!sourceUrl) return null;
-  const url = sourceUrl.toLowerCase();
-
-  if (url.includes("github.com")) return "github";
-  if (url.includes("doi.org") || url.startsWith("10.")) return "crossref";
-  if (url.startsWith("http://") || url.startsWith("https://")) return "link";
-
-  return null;
+export async function sampleExternalMocks(termKey: string, now = new Date()): Promise<number> {
+  const policy = await getActivePolicy();
+  const rows = await db
+    .select()
+    .from(mockAttempts)
+    .where(and(eq(mockAttempts.status, "SELF_REPORTED"), isNull(mockAttempts.sampledAt)));
+  const picked = rows.filter((m) => sampleValue(`${termKey}:${m.id}`) < policy.verification.external_mock_sample_rate);
+  for (const m of picked) await db.update(mockAttempts).set({ sampledAt: now }).where(eq(mockAttempts.id, m.id));
+  await audit({
+    actorUserId: "system",
+    actorRole: "system",
+    action: "mock.sample_external",
+    entityType: "term",
+    entityId: termKey,
+    purpose: "evidence_verification",
+    fieldsAccessed: [`candidates:${rows.length}`, `sampled:${picked.length}`],
+    result: "allowed",
+  });
+  return picked.length;
 }

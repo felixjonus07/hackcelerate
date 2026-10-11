@@ -2,6 +2,25 @@
   "policy_version": "2026.10-v1",
   "status": "DRAFT",
   "status_note": "DRAFT, pending registrar approval. Values are the proposed defaults from the Deep Platform Plan v2.0 and must be replaced with the institution's own (§3.1, §21).",
+  "provisional": [
+    "tracks.higher_studies.params.required_weights",
+    "tracks.higher_studies.params.entrance_speed_share",
+    "tracks.entrepreneurship.params.required_weights",
+    "tracks.freelance_creator.params.required_weights",
+    "tracks.sports_defense_ncc.params.competition_required_points",
+    "tracks.sports_defense_ncc.params.cooper_bands",
+    "tracks.sports_defense_ncc.params.bmi_band_scores",
+    "tracks.sports_defense_ncc.params.min_credits",
+    "data_quality.attendance_missing_weeks_low_over",
+    "calendar.holidays",
+    "cohort.artifact_score_full_weight",
+    "verification.github.fork_min_own_commits",
+    "verification.attested_review_days",
+    "verification.upload",
+    "institution (placeholder contacts)",
+    "privacy.rights_response_days",
+    "retention"
+  ],
   "effective_from": "2026-10-11",
   "academic": {
     "cgpa_scale_max": 10,
@@ -13,8 +32,45 @@
     "condonation_floor_pct": 65,
     "watch_band_pct": [65, 74]
   },
+  "calendar": {
+    "_note": "Synthetic demo calendar; the registrar replaces it with the institution's own (§3.2).",
+    "weekend_days": [0, 6],
+    "holidays": ["2026-10-02", "2026-10-20", "2026-11-08", "2026-11-09", "2026-12-25"],
+    "term": {
+      "start": "2026-07-27",
+      "end": "2026-12-12"
+    },
+    "utc_offset_minutes": 330
+  },
+  "data_quality": {
+    "roll_number_pattern": "^[A-Z]{2,5}\\d{4,8}$",
+    "attendance_window_weeks": 8,
+    "attendance_missing_weeks_medium_over": 2,
+    "attendance_missing_weeks_low_over": 4,
+    "artifact_url_schemes": ["https", "http"],
+    "artifact_reachable_within_days": 14,
+    "minor_age_years": 18,
+    "year1_age_range_years": [16, 30]
+  },
+  "ingestion": {
+    "erp_columns": {
+      "roll_number": ["roll_number", "roll_no", "student_id"],
+      "cgpa": ["cgpa"],
+      "active_backlogs": ["active_backlogs", "backlogs"],
+      "date_of_birth": ["date_of_birth", "dob"],
+      "credits_held": ["credits_held", "credits"],
+      "course": ["course", "course_code"],
+      "week_start": ["week_start"],
+      "classes_held": ["classes_held", "held"],
+      "classes_attended": ["classes_attended", "attended"]
+    },
+    "stale_after_hours": 36
+  },
   "readiness_default": 70,
-  "aeg_bands": { "moderate_from": 0.15, "critical_from": 0.35 },
+  "aeg_bands": {
+    "moderate_from": 0.15,
+    "critical_from": 0.35
+  },
   "personas": {
     "false_positive_high_flyer": {
       "cgpa_min": 8.8,
@@ -28,8 +84,14 @@
       "floor": "CRITICAL"
     },
     "aspiration_mismatch": {
-      "abroad": { "backlogs_min": 3, "deadline_within_months": 12 },
-      "public_service": { "mocks_last_60d_max": 0, "exam_within_months": 12 },
+      "abroad": {
+        "backlogs_min": 3,
+        "deadline_within_months": 12
+      },
+      "public_service": {
+        "mocks_last_60d_max": 0,
+        "exam_within_months": 12
+      },
       "floor": "MODERATE"
     },
     "drifting_student": {
@@ -48,22 +110,122 @@
   "trend": {
     "window_weeks": 4,
     "min_observations": 3,
-    "attendance": { "worsening_slope_max": -2, "improving_slope_min": 2 },
-    "mock_percentile": { "worsening_slope_max": -3, "improving_slope_min": 3 },
+    "attendance": {
+      "worsening_slope_max": -2,
+      "improving_slope_min": 2
+    },
+    "mock_percentile": {
+      "worsening_slope_max": -3,
+      "improving_slope_min": 3
+    },
     "streak_gap_note_days": 5,
     "streak_window_days": 14
   },
-  "pivot": { "score_advantage_min": 10, "min_gap_index": "MODERATE" },
+  "pivot": {
+    "score_advantage_min": 10,
+    "min_gap_index": "MODERATE"
+  },
   "streak": {
     "target_days": 30,
     "min_items_per_credit": 15,
     "daily_credit_cap": 1
+  },
+  "cohort": {
+    "artifact_score_full_weight": 10,
+    "percentile": 75
   },
   "integrity": {
     "min_seconds_per_mcq": 5,
     "min_seconds_per_numerical": 15,
     "burst_commits_per_minute": 25,
     "burst_share_24h": 0.8
+  },
+  "verification": {
+    "github": {
+      "fork_min_own_commits": 10,
+      "recheck_days": 30
+    },
+    "portfolio_recheck_days": 30,
+    "attested_review_days": 365,
+    "external_mock_sample_rate": 0.1,
+    "upload": {
+      "max_bytes": 5242880,
+      "allowed_types": ["application/pdf", "image/png", "image/jpeg"],
+      "signed_url_max_seconds": 300
+    }
+  },
+  "evidence_types": {
+    "platform_timed_assessment": {
+      "label": "Timed assessment on the campus platform",
+      "mode": "platform",
+      "weight": 1
+    },
+    "internal_test": {
+      "label": "Internal test result",
+      "mode": "platform",
+      "weight": 1
+    },
+    "repository_check": {
+      "label": "Public repository",
+      "mode": "link",
+      "verifier": "github",
+      "weight": 2
+    },
+    "doi_or_preprint": {
+      "label": "Paper or preprint link",
+      "mode": "link",
+      "verifier": "crossref",
+      "weight": 3
+    },
+    "attested_log": {
+      "label": "Log attested by the training office",
+      "mode": "upload",
+      "reviewer_role": "faculty_mentor",
+      "weight": 1
+    },
+    "faculty_rubric_review": {
+      "label": "Work reviewed on the faculty rubric",
+      "mode": "upload",
+      "reviewer_role": "faculty_mentor",
+      "weight": 1
+    },
+    "module_certificate": {
+      "label": "Module certificate",
+      "mode": "upload",
+      "verifier": "certificate",
+      "reviewer_role": "faculty_mentor",
+      "weight": 1
+    },
+    "participation_certificate": {
+      "label": "Participation certificate",
+      "mode": "upload",
+      "reviewer_role": "faculty_mentor",
+      "weight": 1
+    },
+    "internship_letter": {
+      "label": "Internship letter",
+      "mode": "upload",
+      "reviewer_role": "placement_officer",
+      "weight": 1
+    },
+    "score_report": {
+      "label": "External test score report",
+      "mode": "upload",
+      "reviewer_role": "faculty_mentor",
+      "weight": 1
+    },
+    "interview_log": {
+      "label": "Customer interview log",
+      "mode": "upload",
+      "reviewer_role": "faculty_mentor",
+      "weight": 1
+    },
+    "faculty_rating": {
+      "label": "Faculty rating sheet",
+      "mode": "reviewer",
+      "reviewer_role": "faculty_mentor",
+      "weight": 1
+    }
   },
   "verification_multipliers": {
     "VERIFIED": 1.0,
@@ -76,13 +238,25 @@
     "SUBMITTED": 0.0,
     "UNDER_CHECK": 0.0
   },
-  "confidence": { "medium_max_gaps": 2, "source_failure_window_days": 7 },
+  "confidence": {
+    "medium_max_gaps": 2,
+    "source_failure_window_days": 7
+  },
   "llm": {
     "free_text_max_chars": 1000,
     "target_days_range": [7, 90],
     "max_action_steps": 3
   },
-  "leaderboard": { "default_opt_in": false },
+  "leaderboard": {
+    "default_opt_in": false,
+    "streak_badge_days": 7,
+    "min_entries": 1
+  },
+  "fairness": {
+    "min_group_size": 20,
+    "ratio_band": [0.8, 1.25],
+    "dimensions": ["medium_of_instruction", "first_generation", "home_region", "gender", "device_access"]
+  },
   "tracks": {
     "corporate_placement": {
       "name": "Corporate Placement",
@@ -94,7 +268,10 @@
         "mock_interview_readiness": 15,
         "verified_experience": 15
       },
-      "params": { "internship_hours_full": 120, "mock_interview_window": 3 },
+      "params": {
+        "internship_hours_full": 120,
+        "mock_interview_window": 3
+      },
       "gate": "at_least_one_department_standard_item"
     },
     "higher_studies": {
@@ -108,7 +285,15 @@
         "faculty_recommendation_readiness": 10,
         "application_timeline_adherence": 10
       },
-      "params": { "sop_reviews_full": 3 },
+      "params": {
+        "sop_reviews_full": 3,
+        "entrance_test_type": "entrance",
+        "entrance_window": 5,
+        "entrance_speed_share": 0,
+        "required_weights": {
+          "research_output": 6
+        }
+      },
       "gate": null
     },
     "entrepreneurship": {
@@ -122,7 +307,14 @@
         "team_and_execution": 15,
         "academic_continuity": 15
       },
-      "params": { "customer_interviews_full": 15 },
+      "params": {
+        "customer_interviews_full": 15,
+        "customer_rating_window": 3,
+        "required_weights": {
+          "venture_traction": 5,
+          "build_evidence": 4
+        }
+      },
       "gate": null
     },
     "public_service": {
@@ -135,7 +327,14 @@
         "mock_streak": 15,
         "answer_writing": 10
       },
-      "params": { "gs_mock_window": 3, "current_affairs_window_days": 30 },
+      "params": {
+        "gs_mock_window": 3,
+        "gs_test_type": "gs_full",
+        "quant_test_type": "quant",
+        "weekly_test_type": "weekly_test",
+        "current_affairs_window_days": 30,
+        "answer_writing_window": 3
+      },
       "gate": "cgpa_above_eligibility_floor"
     },
     "freelance_creator": {
@@ -148,7 +347,15 @@
         "live_deployments": 20,
         "open_source_community": 10
       },
-      "params": {},
+      "params": {
+        "required_weights": {
+          "live_portfolio": 1,
+          "client_work": 6,
+          "tool_certifications": 3,
+          "live_deployments": 4,
+          "open_source_community": 3
+        }
+      },
       "gate": "attendance_at_or_above_requirement"
     },
     "sports_defense_ncc": {
@@ -161,7 +368,37 @@
         "psychometric_readiness": 25
       },
       "params": {
-        "competition_points": { "university": 1, "state": 2, "national": 3 }
+        "competition_points": {
+          "university": 1,
+          "state": 2,
+          "national": 3
+        },
+        "competition_required_points": 6,
+        "cooper_bands": [
+          {
+            "min_metres": 0,
+            "score": 25
+          },
+          {
+            "min_metres": 1600,
+            "score": 50
+          },
+          {
+            "min_metres": 2000,
+            "score": 75
+          },
+          {
+            "min_metres": 2400,
+            "score": 100
+          }
+        ],
+        "bmi_band_scores": {
+          "in_range": 100,
+          "borderline": 50,
+          "out_of_range": 0
+        },
+        "psychometric_window": 3,
+        "min_credits": 80
       },
       "gate": "minimum_credits_held"
     }
@@ -170,9 +407,18 @@
     "MECH": {
       "name": "Mechanical",
       "items": {
-        "solidworks_lab": { "label": "SolidWorks lab completion", "weight": 2 },
-        "autocad_lab": { "label": "AutoCAD lab", "weight": 1 },
-        "gdt_assessment": { "label": "Timed GD&T assessment", "weight": 3 },
+        "solidworks_lab": {
+          "label": "SolidWorks lab completion",
+          "weight": 2
+        },
+        "autocad_lab": {
+          "label": "AutoCAD lab",
+          "weight": 1
+        },
+        "gdt_assessment": {
+          "label": "Timed GD&T assessment",
+          "weight": 3
+        },
         "factory_internship_hours": {
           "label": "Factory internship hours",
           "weight": 3
@@ -186,7 +432,10 @@
           "label": "Advanced Excel financial model",
           "weight": 3
         },
-        "tally_erp": { "label": "Tally ERP proficiency", "weight": 2 },
+        "tally_erp": {
+          "label": "Tally ERP proficiency",
+          "weight": 2
+        },
         "taxation_knowledge": {
           "label": "Statutory taxation knowledge",
           "weight": 3
@@ -196,7 +445,10 @@
     "BIOT": {
       "name": "Biotechnology",
       "items": {
-        "wet_lab_hours": { "label": "Wet-lab hours", "weight": 2 },
+        "wet_lab_hours": {
+          "label": "Wet-lab hours",
+          "weight": 2
+        },
         "clinical_data_module": {
           "label": "Clinical data management module",
           "weight": 2
@@ -214,7 +466,10 @@
           "label": "Moot court citations",
           "weight": 3
         },
-        "drafting_standards": { "label": "Drafting standards", "weight": 3 },
+        "drafting_standards": {
+          "label": "Drafting standards",
+          "weight": 3
+        },
         "contract_case_preparation": {
           "label": "Contract case preparation",
           "weight": 2
@@ -228,8 +483,14 @@
           "label": "Practice problem sets",
           "weight": 2
         },
-        "deployed_projects": { "label": "Deployed projects", "weight": 3 },
-        "systems_design_notes": { "label": "Systems design notes", "weight": 2 }
+        "deployed_projects": {
+          "label": "Deployed projects",
+          "weight": 3
+        },
+        "systems_design_notes": {
+          "label": "Systems design notes",
+          "weight": 2
+        }
       }
     },
     "EEE": {
@@ -239,7 +500,10 @@
           "label": "Circuit or PCB project",
           "weight": 3
         },
-        "embedded_lab_hours": { "label": "Embedded lab hours", "weight": 2 },
+        "embedded_lab_hours": {
+          "label": "Embedded lab hours",
+          "weight": 2
+        },
         "signal_power_test": {
           "label": "Signal and power technical test",
           "weight": 3
@@ -253,8 +517,14 @@
           "label": "AutoCAD or STAAD model completion",
           "weight": 3
         },
-        "site_visit_log": { "label": "Site visit log", "weight": 2 },
-        "estimation_test": { "label": "Estimation test", "weight": 3 }
+        "site_visit_log": {
+          "label": "Site visit log",
+          "weight": 2
+        },
+        "estimation_test": {
+          "label": "Estimation test",
+          "weight": 3
+        }
       }
     }
   },
@@ -267,7 +537,9 @@
       "sla_working_days": 2,
       "escalate_to": "dean",
       "escalate_after_working_days": 5,
-      "closure": "Attendance above the floor for three consecutive weeks, or a condonation decision recorded"
+      "closure": "Attendance above the floor for three consecutive weeks, or a condonation decision recorded",
+      "shares": ["artifacts_evidence"],
+      "escalation_condition": "no_decision"
     },
     "aspiration_mismatch": {
       "label": "Timeline review",
@@ -277,7 +549,9 @@
       "sla_working_days": 5,
       "escalate_to": "hod",
       "escalate_after_working_days": null,
-      "closure": "Student records a decision to continue, pivot, or extend the target date"
+      "closure": "Student records a decision to continue, pivot, or extend the target date",
+      "shares": [],
+      "escalation_condition": "no_decision"
     },
     "false_positive_high_flyer": {
       "label": "Aptitude and project plan",
@@ -287,7 +561,9 @@
       "sla_working_days": 5,
       "escalate_to": "faculty_mentor",
       "escalate_after_working_days": 14,
-      "closure": "Aptitude score and one verified project recorded, or student declines with a reason"
+      "closure": "Aptitude score and one verified project recorded, or student declines with a reason",
+      "shares": ["persona_aeg"],
+      "escalation_condition": "no_quest_started"
     },
     "drifting_student": {
       "label": "Mapping conversation",
@@ -297,7 +573,9 @@
       "sla_working_days": 7,
       "escalate_to": "hod",
       "escalate_after_working_days": 21,
-      "closure": "Track declared and first meeting logged"
+      "closure": "Track declared and first meeting logged",
+      "shares": [],
+      "escalation_condition": "no_meeting"
     },
     "attendance_critical": {
       "label": "Attendance critical",
@@ -307,7 +585,9 @@
       "sla_working_days": 2,
       "escalate_to": "dean",
       "escalate_after_working_days": 5,
-      "closure": "Attendance above the floor for three consecutive weeks, or a condonation decision recorded"
+      "closure": "Attendance above the floor for three consecutive weeks, or a condonation decision recorded",
+      "shares": [],
+      "escalation_condition": "no_decision"
     },
     "integrity_flag": {
       "label": "Evidence review",
@@ -317,7 +597,9 @@
       "sla_working_days": 3,
       "escalate_to": "program_coordinator",
       "escalate_after_working_days": 3,
-      "closure": "Flag resolved with a stated reason"
+      "closure": "Flag resolved with a stated reason",
+      "shares": [],
+      "escalation_condition": "unresolved"
     }
   },
   "counseling": {
@@ -325,24 +607,77 @@
     "wip_limit_per_mentor": 25,
     "inactivity_amber_days": 14
   },
+  "quests": {
+    "defer_days": 14,
+    "max_open_per_student": 5
+  },
+  "notice": {
+    "version": "2026.10-n1"
+  },
+  "privacy": {
+    "rights_response_days": 30
+  },
+  "institution": {
+    "name": "Synthetic Demo University",
+    "counseling": {
+      "name": "Campus counselling centre",
+      "phone": "0000 000 0000",
+      "email": "counselling@university.example",
+      "hours": "Monday to Saturday, 9:00 to 17:00"
+    },
+    "emergency": {
+      "name": "Campus emergency line",
+      "phone": "0000 000 001",
+      "note": "In an emergency, follow the campus emergency procedure first."
+    },
+    "grievance_officer": {
+      "name": "Grievance Officer",
+      "email": "grievance@university.example",
+      "phone": "0000 000 0002"
+    }
+  },
+  "retention": {
+    "erp_copies": {
+      "academic_years_after": 1,
+      "erasable_on_request": true
+    },
+    "artifact_files": {
+      "days_after_verification": 90,
+      "erasable_on_request": true
+    },
+    "evaluations": {
+      "months_after_graduation": 12,
+      "erasable_on_request": true
+    },
+    "interventions": {
+      "years_after_closure": 3,
+      "erasable_on_request": false,
+      "legal_reason": "The institution keeps a record of how support was offered, for its own audit."
+    },
+    "mock_raw_answers": {
+      "months": 12,
+      "erasable_on_request": true
+    },
+    "consent_history": {
+      "life_of_record": true,
+      "erasable_on_request": false,
+      "legal_reason": "The history of what you chose to share is part of the audit trail and is removed only with the record itself."
+    },
+    "audit_events": {
+      "years": 7,
+      "erasable_on_request": false,
+      "legal_reason": "Access logs are kept for seven years for the institution's audit."
+    }
+  },
   "wellbeing": {
     "late_night_sessions_nights": 5,
     "late_night_window_days": 14,
     "mock_volume_spike_pct": 100,
     "attendance_drop_points": 10,
-    "activity_stop_days": 14
-  },
-  "calendar": {
-    "holidays": [
-      "2026-01-26",
-      "2026-03-25",
-      "2026-04-14",
-      "2026-05-01",
-      "2026-08-15",
-      "2026-10-02",
-      "2026-10-20",
-      "2026-11-08",
-      "2026-12-25"
-    ]
+    "activity_stop_days": 14,
+    "late_night_start_hour": 0,
+    "late_night_end_hour": 5,
+    "heavy_use_min_events": 10,
+    "spike_min_previous_mocks": 2
   }
 }

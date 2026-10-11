@@ -103,3 +103,10 @@ export const stripRefs = (s: string) =>
     .replace(/\s*\[ev:[^\]]+\]/g, "")
     .replace(/\s+([.,;])/g, "$1")
     .trim();
+
+/** Recovery nudges (§14.2): the pattern is named in plain words, never a label for the student. */
+export const NUDGE_TITLE: Record<string, string> = {
+  late_night: "A lot of late-night work lately",
+  volume_spike: "A sudden jump in how much you've been doing",
+  activity_stop: "A quiet stretch after a busy one",
+};

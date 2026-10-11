@@ -1,13 +1,10 @@
 "use client";
-import { Download, FilePenLine, Info, Trash2 } from "lucide-react";
 import { useOptimistic, useState, useTransition } from "react";
 import { requestRight, setLeaderboardVisibility, updateConsent } from "@/app/student/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Tag } from "@/components/ui/tag";
 import type { ConsentCategory } from "@/server/db/schema/enums";
-import type { getStudentRightsRequests } from "@/server/services/rights";
 
 const RECIPIENT_LABELS: Record<string, string> = {
   placement_officer: "Placement cell",
@@ -17,30 +14,51 @@ const RECIPIENT_LABELS: Record<string, string> = {
 
 type State = Record<string, Record<string, boolean>>;
 
-type RightsRequestItem = Awaited<ReturnType<typeof getStudentRightsRequests>>[number];
+export interface RequestRow {
+  id: string;
+  kind: string;
+  status: string;
+  createdOn: string;
+  dueOn: string | null;
+  resolution: string | null;
+}
+
+const KIND_LABEL: Record<string, string> = { access: "Data download", correction: "Correction", erasure: "Erasure" };
+const STATUS_LABEL: Record<string, string> = {
+  OPEN: "Waiting",
+  IN_PROGRESS: "Being handled",
+  RESOLVED: "Done",
+  REJECTED: "Not possible",
+};
 
 export function ConsentCenter({
   state,
   categories,
   recipients,
   leaderboard,
-  rightsRequestsList = [],
+  requests,
 }: {
   state: State;
   categories: Record<string, string>;
   recipients: string[];
   leaderboard: boolean;
-  rightsRequestsList?: RightsRequestItem[];
+  requests: RequestRow[];
 }) {
+  const [rights, setRights] = useState<{ ok: boolean; message: string; letter?: string | null; kind: string } | null>(
+    null,
+  );
+  const [confirmErase, setConfirmErase] = useState(false);
+  const raise = (kind: "access" | "correction" | "erasure") =>
+    start(async () => {
+      setRights({ ...(await requestRight(kind)), kind });
+      setConfirmErase(false);
+    });
   const [pending, start] = useTransition();
   const [optimistic, setOptimistic] = useOptimistic(state, (s: State, u: { c: string; r: string; v: boolean }) => ({
     ...s,
     [u.c]: { ...s[u.c], [u.r]: u.v },
   }));
   const [lb, setLb] = useOptimistic(leaderboard);
-  const [correctionNote, setCorrectionNote] = useState("");
-  const [showCorrectionForm, setShowCorrectionForm] = useState(false);
-  const [showErasureConfirm, setShowErasureConfirm] = useState(false);
 
   const toggle = (c: string, r: string, v: boolean) =>
     start(async () => {
@@ -51,23 +69,6 @@ export function ConsentCenter({
         granted: v,
       });
     });
-
-  const handleCorrectionSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!correctionNote.trim()) return;
-    start(async () => {
-      await requestRight("correction", correctionNote.trim());
-      setCorrectionNote("");
-      setShowCorrectionForm(false);
-    });
-  };
-
-  const handleErasureSubmit = () => {
-    start(async () => {
-      await requestRight("erasure", "Student requested account erasure against retention schedule");
-      setShowErasureConfirm(false);
-    });
-  };
 
   return (
     <div className="grid gap-5">
@@ -143,12 +144,7 @@ export function ConsentCenter({
         <Card>
           <CardHeader title="Leaderboards" hint="Off unless you switch it on. You can leave at any time." />
           <div className="flex items-center justify-between gap-4 rounded-2xl bg-sand px-4 py-3">
-            <div>
-              <p className="font-semibold">Show me on my track's leaderboard</p>
-              <p className="text-xs text-ink-2">
-                Displays your pseudonymous score and verified projects on leaderboard tabs.
-              </p>
-            </div>
+            <span className="font-semibold">Show me on my track's leaderboard</span>
             <Switch
               label="Show me on leaderboards"
               checked={lb}
@@ -161,103 +157,65 @@ export function ConsentCenter({
             />
           </div>
         </Card>
-
         <Card>
-          <CardHeader title="Your data rights" hint="Statutory rights under India DPDP Act 2023 (§13.7)." />
+          <CardHeader title="Your data rights" hint="Requests go to the person who can act on them, with a deadline." />
           <div className="flex flex-wrap gap-2">
-            <a
-              href="/api/v1/students/me/export"
-              download
-              className="press inline-flex h-9 items-center gap-1.5 rounded-full bg-sand-2 px-4 text-sm font-bold text-ink hover:bg-sand-3"
-            >
-              <Download aria-hidden className="size-4" />
+            <Button variant="secondary" size="sm" disabled={pending} onClick={() => raise("access")}>
               Download my data
-            </a>
-            <Button variant="secondary" size="sm" disabled={pending} onClick={() => setShowCorrectionForm((s) => !s)}>
-              <FilePenLine aria-hidden className="size-4" />
+            </Button>
+            <Button variant="secondary" size="sm" disabled={pending} onClick={() => raise("correction")}>
               Request a correction
             </Button>
-            <Button variant="danger" size="sm" disabled={pending} onClick={() => setShowErasureConfirm((s) => !s)}>
-              <Trash2 aria-hidden className="size-4" />
-              Request erasure
-            </Button>
+            {confirmErase ? (
+              <>
+                <Button variant="danger" size="sm" disabled={pending} onClick={() => raise("erasure")}>
+                  Yes, request erasure
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmErase(false)}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button variant="danger" size="sm" disabled={pending} onClick={() => setConfirmErase(true)}>
+                Request erasure
+              </Button>
+            )}
           </div>
-
-          {showCorrectionForm && (
-            <form onSubmit={handleCorrectionSubmit} className="mt-4 grid gap-2 rounded-2xl bg-sand p-3.5">
-              <label className="text-xs font-bold text-ink">
-                What would you like corrected?
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. CGPA update, attendance record, or name spelling"
-                  value={correctionNote}
-                  onChange={(e) => setCorrectionNote(e.target.value)}
-                  className="mt-1 h-9 w-full rounded-field border border-line bg-card px-3 text-sm font-normal"
-                />
-              </label>
-              <div className="flex items-center gap-2">
-                <Button type="submit" size="sm" disabled={pending}>
-                  Submit request
-                </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setShowCorrectionForm(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          )}
-
-          {showErasureConfirm && (
-            <div className="mt-4 rounded-2xl bg-sand p-3.5 text-xs text-ink-2">
-              <p className="font-bold text-ink text-sm">Retention Schedule Notice (§13.5)</p>
-              <p className="mt-1">
-                Academic baseline, official degrees, and audit logs are retained for a minimum of 5 years post-degree
-                per statutory university guidelines. Self-reported links and elective aspirations are erased within 30
-                days.
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                <Button variant="danger" size="sm" disabled={pending} onClick={handleErasureSubmit}>
-                  Confirm erasure request
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setShowErasureConfirm(false)}>
-                  Cancel
-                </Button>
-              </div>
+          {rights ? (
+            <div className="mt-4 grid gap-2">
+              <output className={rights.ok ? "text-sm font-semibold text-low" : "text-sm font-semibold text-crit"}>
+                {rights.message}
+              </output>
+              {rights.ok && rights.kind === "access" ? (
+                <a href="/api/v1/students/me/export" download className="w-fit text-sm font-bold text-act underline">
+                  Download the export (JSON)
+                </a>
+              ) : null}
+              {rights.letter ? (
+                <pre className="whitespace-pre-wrap rounded-2xl bg-sand p-4 font-[inherit] text-[0.9rem]">
+                  {rights.letter}
+                </pre>
+              ) : null}
             </div>
-          )}
+          ) : null}
+          {requests.length ? (
+            <ul className="mt-4 divide-y divide-line border-t border-line">
+              {requests.map((r) => (
+                <li key={r.id} className="py-3 text-[0.95rem]">
+                  <p className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold">{KIND_LABEL[r.kind] ?? r.kind}</span>
+                    <span className="text-sm text-ink-2">
+                      {STATUS_LABEL[r.status] ?? r.status} · asked {r.createdOn}
+                      {r.status !== "RESOLVED" && r.dueOn ? ` · reply due ${r.dueOn}` : ""}
+                    </span>
+                  </p>
+                  {r.resolution ? <p className="mt-1 text-sm text-ink-2">{r.resolution}</p> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </Card>
       </div>
-
-      {rightsRequestsList.length > 0 && (
-        <Card>
-          <CardHeader
-            title="Request history"
-            hint="Requests logged under DPDP Act 2023 with a 30-day statutory response SLA."
-          />
-          <ul className="divide-y divide-line">
-            {rightsRequestsList.map((req) => (
-              <li key={req.id} className="grid gap-1 py-3 text-sm sm:flex sm:items-center sm:justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-extrabold capitalize text-ink">{req.kind} request</span>
-                    <Tag kind={req.status === "COMPLETED" ? "low" : "mod"}>{req.status}</Tag>
-                  </div>
-                  {req.detail && <p className="text-ink-2 text-xs mt-0.5">{req.detail}</p>}
-                  {req.resolution && (
-                    <p className="text-xs text-ink-2 mt-0.5">
-                      <Info aria-hidden className="inline mr-1 size-3.5 text-mod align-text-bottom" />
-                      {req.resolution}
-                    </p>
-                  )}
-                </div>
-                <div className="text-xs text-ink-2 shrink-0">
-                  {req.dueAt ? `SLA: ${new Date(req.dueAt).toLocaleDateString()}` : "Logged"}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
     </div>
   );
 }

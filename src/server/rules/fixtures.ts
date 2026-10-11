@@ -5,7 +5,11 @@
  */
 import type { StudentFacts } from "./types";
 
+/** The date every fixture describes; rubrics that depend on dates read it through `facts.asOf`. */
+export const FIXTURE_AS_OF = "2026-10-11";
+
 const base = (over: Partial<StudentFacts> & Pick<StudentFacts, "studentId" | "department" | "year">): StudentFacts => ({
+  asOf: FIXTURE_AS_OF,
   cgpa: null,
   attendancePct: null,
   aspiration: {
@@ -140,7 +144,13 @@ export const CS_44 = base({
       source: "ecell",
     },
   ],
-  precomputed: { customer_validation: 60, team_and_execution: 70 },
+  ratings: [{ id: "rt-cs44-cv", kind: "customer_validation", date: "2026-09-20", rating: 4, status: "ATTESTED" }],
+  milestones: [
+    { id: "ms-cs44-1", scope: "venture", title: "Pilot signed", dueOn: "2026-08-15", completedOn: "2026-08-10" },
+    { id: "ms-cs44-2", scope: "venture", title: "MVP live", dueOn: "2026-09-15", completedOn: "2026-09-14" },
+    { id: "ms-cs44-3", scope: "venture", title: "First paid invoice", dueOn: "2026-10-01", completedOn: "2026-10-05" },
+    { id: "ms-cs44-4", scope: "venture", title: "Seed pitch", dueOn: "2026-12-01", completedOn: null },
+  ],
   attendanceWeekly: [
     { week: 1, value: 71 },
     { week: 2, value: 68 },
@@ -165,7 +175,7 @@ export const EE_12 = base({
   },
   campusAptitudePercentile: 47,
   verifiedProjects: 0,
-  verifiedInternshipHours: 40,
+  verifiedInternshipHours: 62,
   evidence: [
     {
       id: "ev-ee12-lab",
@@ -338,11 +348,31 @@ export const SEED_RECORDS: {
           source: "faculty",
           weight: 3,
         },
+        {
+          id: "ev-syn05-sop",
+          component: "faculty_recommendation_readiness",
+          label: "Statement of purpose reviewed by faculty",
+          status: "ATTESTED",
+          source: "faculty",
+          kind: "sop_review",
+        },
       ],
-      precomputed: {
-        faculty_recommendation_readiness: 33.3,
-        application_timeline_adherence: 50,
-      },
+      milestones: [
+        {
+          id: "ms-syn05-1",
+          scope: "application",
+          title: "Shortlist universities",
+          dueOn: "2026-08-30",
+          completedOn: "2026-08-28",
+        },
+        {
+          id: "ms-syn05-2",
+          scope: "application",
+          title: "Entrance exam registration",
+          dueOn: "2026-09-30",
+          completedOn: null,
+        },
+      ],
       activityLast60d: 6,
     }),
     expectedPersona: "aspiration_mismatch",
@@ -376,8 +406,7 @@ export const SEED_RECORDS: {
       },
       mocksLast60d: 0,
       monthsToDeadline: 10,
-      streakValidDays: 0,
-      precomputed: { current_affairs_consistency: 20 },
+      currentAffairsDates: ["2026-09-20", "2026-09-27", "2026-10-04"],
       activityLast60d: 3,
     }),
     expectedPersona: "aspiration_mismatch",

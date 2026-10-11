@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/shell/app-shell";
+import { ShadowHold } from "@/components/shell/shadow-hold";
 import { KanbanBoard } from "@/components/staff/kanban-board";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/server/auth/session";
 import { board } from "@/server/services/counseling";
+import { mayViewOutputs } from "@/server/shadow";
 
 export const metadata: Metadata = { title: "Counseling board" };
 
 async function Board() {
   const user = await requireUser(["faculty_mentor"]);
-  const b = await board(user.id);
+  if (!mayViewOutputs(user)) return <ShadowHold />;
+  const b = await board(user);
   return (
     <KanbanBoard
       wipLimit={b.wipLimit}

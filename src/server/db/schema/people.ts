@@ -15,17 +15,16 @@ import {
 import { user } from "./auth";
 import { roleEnum, trackEnum } from "./enums";
 
+/**
+ * Cohort-derived signals refreshed nightly (§7.3): the verified artifact score and the cohort's 75th
+ * percentile. Everything else the rubrics read comes straight from the base tables. A key listed in
+ * `pinned` is left alone by the refresh (the seed pins the plan's worked examples).
+ */
 export interface StudentSignals {
   artifactScore?: number | null;
   cohortArtifactP75?: number | null;
-  verifiedProjects?: number;
-  activityLast60d?: number;
-  mocksLast60d?: number;
-  monthsToDeadline?: number | null;
-  streakValidDays?: number;
-  streakGapDays14?: number;
-  precomputed?: Record<string, number | null>;
   recentSourceFailures?: number;
+  pinned?: string[];
 }
 
 export const departments = pgTable("departments", {
@@ -57,9 +56,19 @@ export const students = pgTable(
     }),
     activeBacklogs: integer("active_backlogs").notNull().default(0),
     dateOfBirth: date("date_of_birth"),
-    /** DPDP Act 2023 / §4.3: true if student was under 18 at onboarding. */
-    parentalConsentRequired: boolean("parental_consent_required").notNull().default(false),
-    parentalConsentAt: timestamp("parental_consent_at", { withTimezone: true }),
+    /** Credits held, from the ERP; the Sports, Defense and NCC gate reads it (§5.3.6). */
+    creditsHeld: integer("credits_held"),
+    /** GitHub login proven by OAuth, so repository ownership can be confirmed (§6.2). */
+    /** Set when the student has finished onboarding (§12.1); step is the card they are on. */
+    onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+    onboardingStep: integer("onboarding_step").notNull().default(0),
+    /** Graduation date; evaluations are retained 12 months after it (§13.5). */
+    graduatedOn: date("graduated_on"),
+    githubLogin: text("github_login"),
+    githubLinkedAt: timestamp("github_linked_at", { withTimezone: true }),
+    /** When the last ERP import touched this record; `erpStale` is set when a night's file was missing (§6.2). */
+    erpImportedAt: timestamp("erp_imported_at", { withTimezone: true }),
+    erpStale: boolean("erp_stale").notNull().default(false),
     isSynthetic: boolean("is_synthetic").notNull().default(false),
     /**
      * Snapshot of ingestion-derived signals the rubric reads (activity counts,

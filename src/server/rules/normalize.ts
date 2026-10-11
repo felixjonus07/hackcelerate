@@ -28,8 +28,9 @@ export function speedScore(targetSeconds: number, avgSeconds: number): number {
   return Math.min(100, (100 * targetSeconds) / avgSeconds);
 }
 
-export function streakScore(validDaysInLast30: number): number {
-  return (Math.min(validDaysInLast30, 30) / 30) * 100;
+/** `targetDays` is the streak window from the policy (30 by default, §5.2). */
+export function streakScore(validDays: number, targetDays: number): number {
+  return targetDays <= 0 ? 0 : (Math.min(validDays, targetDays) / targetDays) * 100;
 }
 
 export function consistencyScore(weeksWithTwoMocksInLast8: number): number {

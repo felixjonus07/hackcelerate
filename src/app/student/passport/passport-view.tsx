@@ -10,7 +10,7 @@ import { GapTag, Tag } from "@/components/ui/tag";
 import { firstName, score1 } from "@/lib/format";
 import { CONFIDENCE_NOTE, type GapLevel, stripRefs, TREND_STUDENT } from "@/lib/labels";
 import type { PassportData } from "@/server/services/passport";
-import { acceptQuest } from "../actions";
+import { NudgeList } from "./nudge-list";
 
 export function PassportView({ data }: { data: PassportData }) {
   const { evaluation: ev, quests, evidence } = data;
@@ -33,7 +33,14 @@ export function PassportView({ data }: { data: PassportData }) {
   }
 
   const result = ev.result;
-  const next = quests.find((q) => q.status === "PROPOSED" || q.status === "ACCEPTED" || q.status === "ACTIVE");
+  const now = new Date();
+  const next = quests.find(
+    (q) =>
+      (q.status === "PROPOSED" && !(q.deferredUntil && q.deferredUntil > now)) ||
+      q.status === "ACCEPTED" ||
+      q.status === "ACTIVE",
+  );
+  const scoreShown = result.scoreShown;
   const gaps = result.trackScore.dataGaps;
   const summary = ev.narrative?.risk_summary ? stripRefs(ev.narrative.risk_summary) : null;
 
@@ -44,41 +51,32 @@ export function PassportView({ data }: { data: PassportData }) {
         description={data.aspiration?.targetOutcome ? `Aiming for: ${data.aspiration.targetOutcome}` : undefined}
       />
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        {data.wellbeingNudges?.map((nudge) => (
-          <Card key={nudge.patternId} className="lg:col-span-2 bg-sand">
-            <div className="flex items-start gap-3">
-              <LifeBuoy aria-hidden className="mt-0.5 size-5 shrink-0 text-mod" />
-              <div>
-                <h2 className="font-extrabold text-ink">{nudge.title}</h2>
-                <p className="mt-1 text-sm text-ink-2">{nudge.patternExplanation}</p>
-                <p className="mt-2 text-sm text-ink font-medium">{nudge.supportMessage}</p>
-                <div className="mt-3 flex flex-wrap gap-4 text-xs text-ink-2 border-t border-line pt-2.5">
-                  <span>{nudge.counselingContact}</span>
-                  <span>{nudge.emergencyContact}</span>
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
+      {data.parental.minor && data.parental.status !== "VERIFIED" ? (
+        <output className="mb-5 block rounded-card bg-mod-bg px-5 py-4 font-semibold text-mod">
+          Your passport is paused until a parent or guardian's consent is recorded. Ask the registrar's office to record
+          it; nothing is scored or sent until then.
+        </output>
+      ) : null}
 
+      <div className="grid gap-5 lg:grid-cols-2">
         <Card aria-labelledby="score-h">
           <p id="score-h" className="text-sm font-bold text-ink-2">
             {data.trackName} · track score
           </p>
-          {result?.trackScore?.gateFailed ? (
-            <div className="mt-3">
-              <p className="text-2xl font-black text-ink">{result.trackScore.gateFailed}</p>
-              <p className="mt-2 text-sm text-ink-2">
-                A track gate prerequisite is not met yet. Meet the requirement to reveal your score.
-              </p>
-            </div>
-          ) : (
+          {scoreShown ? (
             <>
               <p className="tabular mt-1 text-[3.5rem] font-black leading-none tracking-tight">
                 {score1(ev.trackScore)}
               </p>
               <ReadinessBar score={ev.trackScore} readiness={ev.readiness} />
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-[1.45rem] font-black leading-snug tracking-tight">Not enough evidence yet</p>
+              <p className="mt-2 max-w-[48ch] text-ink-2">
+                A score for this track needs a little more to go on. The steps on this page are the quickest way to get
+                one.
+              </p>
             </>
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2 text-ink-2">
@@ -109,14 +107,7 @@ export function PassportView({ data }: { data: PassportData }) {
               </p>
               <div className="mt-auto flex flex-wrap items-center gap-3 pt-6">
                 {next.status === "PROPOSED" ? (
-                  <form action={acceptQuest.bind(null, next.id)}>
-                    <button
-                      type="submit"
-                      className="press inline-flex h-11 items-center rounded-full bg-act px-5 font-bold text-act-ink shadow-[0_6px_16px_-8px_var(--act)] hover:bg-act-hover"
-                    >
-                      Start quest
-                    </button>
-                  </form>
+                  <ButtonLink href="/student/quests">Review this quest</ButtonLink>
                 ) : (
                   <ButtonLink href="/student/quests">Add evidence</ButtonLink>
                 )}
@@ -180,6 +171,8 @@ export function PassportView({ data }: { data: PassportData }) {
             </EmptyState>
           )}
         </Card>
+
+        {data.nudges.length ? <NudgeList nudges={data.nudges} support={data.institution.counseling} /> : null}
 
         <Card className="lg:col-span-2">
           <CardHeader title="How your score is built" hint={CONFIDENCE_NOTE[ev.confidence]} />
@@ -246,9 +239,12 @@ export function PassportView({ data }: { data: PassportData }) {
         <span className="inline-flex items-center gap-2 font-bold text-ink">
           <LifeBuoy aria-hidden className="size-4" /> Need to talk to someone?
         </span>
-        <span>Campus counseling centre: Block A, room 12 (synthetic contact)</span>
-        <span>Emergency: 112</span>
-        <span>Grievance officer: grievance@aspiredge.example</span>
+        <span>
+          {data.institution.counseling.name}: {data.institution.counseling.phone}, {data.institution.counseling.hours}
+        </span>
+        <span>
+          {data.institution.emergency.name}: {data.institution.emergency.phone}
+        </span>
       </footer>
     </>
   );

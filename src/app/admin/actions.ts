@@ -10,6 +10,16 @@ import { COUNSELING_COLUMNS } from "@/server/db/schema/enums";
 import { decide } from "@/server/services/approvals";
 import { moveCard } from "@/server/services/counseling";
 import { runEvaluation } from "@/server/services/evaluations";
+import { approveVersion, createDraft, PolicyError } from "@/server/services/policy-admin";
+import { ErasureError, executeErasure } from "@/server/services/retention";
+import { RightsError, resolveRequest } from "@/server/services/rights";
+import {
+  confirmInternship,
+  ReviewError,
+  resolveFlag,
+  reviewArtifact,
+  reviewSampledMock,
+} from "@/server/verification/review";
 
 const decisionInput = z.object({
   interventionId: z.uuid(),
@@ -32,9 +42,10 @@ export async function decideIntervention(_: unknown, form: FormData): Promise<{ 
       message: "Something in the form is missing. Reload and try again.",
     };
   const d = parsed.data;
-  let res: Awaited<ReturnType<typeof decide>>;
+  let dispatch: Awaited<ReturnType<typeof decide>>["dispatch"] = null;
   try {
-    res = await decide(d.interventionId, user, d.decision, d.note ?? null, d.message ?? null);
+    const r = await decide(d.interventionId, user, d.decision, d.note ?? null, d.message ?? null);
+    dispatch = r.dispatch;
   } catch (e) {
     return {
       ok: false,
@@ -52,16 +63,14 @@ export async function decideIntervention(_: unknown, form: FormData): Promise<{ 
     result: "allowed",
   });
   revalidatePath("/admin/approvals");
-
-  let message = "Approved and dispatched.";
-  if (d.decision === "reject") {
-    message = "Rejected. The reason is saved with the record.";
-  } else if (res.dispatchResult && !res.dispatchResult.dispatched && res.dispatchResult.reason) {
-    message = `Approved, but dispatch blocked: ${res.dispatchResult.reason}`;
-  }
   return {
     ok: true,
-    message,
+    message:
+      d.decision === "reject"
+        ? "Rejected. The reason is saved with the record."
+        : dispatch?.status === "BLOCKED"
+          ? `Approved, but not sent. ${dispatch.message}`
+          : "Approved and sent.",
   };
 }
 
@@ -97,4 +106,120 @@ export async function runEval(studentId: string) {
     result: "allowed",
   });
   revalidatePath("/admin", "layout");
+}
+
+const reviewInput = z.object({
+  kind: z.enum(["artifact", "internship", "mock", "flag"]),
+  id: z.uuid(),
+  decision: z.enum(["attest", "reject", "MATCH", "MISMATCH", "resolve"]),
+  reason: z.string().max(500),
+});
+
+/** One decision on one waiting item (§6.2). The reviewer is the signed-in person; the reason is stored with the record. */
+export async function reviewItem(_: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
+  const user = await requireUser(APPROVER_ROLES);
+  const parsed = reviewInput.safeParse({
+    kind: form.get("kind"),
+    id: form.get("id"),
+    decision: form.get("decision"),
+    reason: String(form.get("reason") ?? ""),
+  });
+  if (!parsed.success) return { ok: false, message: "Something in the form is missing. Reload and try again." };
+  const d = parsed.data;
+  const ip = (await headers()).get("x-forwarded-for");
+  try {
+    if (d.kind === "artifact" && (d.decision === "attest" || d.decision === "reject"))
+      await reviewArtifact(user, d.id, d.decision, d.reason, ip);
+    else if (d.kind === "internship" && (d.decision === "attest" || d.decision === "reject"))
+      await confirmInternship(user, d.id, d.decision, d.reason);
+    else if (d.kind === "mock" && (d.decision === "MATCH" || d.decision === "MISMATCH"))
+      await reviewSampledMock(user, d.id, d.decision, d.reason);
+    else if (d.kind === "flag" && d.decision === "resolve") await resolveFlag(user, d.id, d.reason);
+    else return { ok: false, message: "That decision doesn't fit this item." };
+  } catch (e) {
+    if (e instanceof ReviewError) return { ok: false, message: e.message };
+    if (e instanceof Error) return { ok: false, message: e.message };
+    throw e;
+  }
+  revalidatePath("/admin/evidence");
+  return { ok: true, message: "Recorded." };
+}
+
+// ── Registrar and policy (§3.3, §13.7) ───────────────────────────────────────────────────
+
+export async function createPolicyDraft(
+  _: unknown,
+  form: FormData,
+): Promise<{ ok: boolean; message: string; issues?: string[] }> {
+  const user = await requireUser(["registrar"]);
+  let doc: unknown;
+  try {
+    doc = JSON.parse(String(form.get("document") ?? ""));
+  } catch {
+    return { ok: false, message: "The text is not valid JSON.", issues: [] };
+  }
+  try {
+    const d = await createDraft(user, doc, (await headers()).get("x-forwarded-for"));
+    revalidatePath("/admin/policy");
+    return {
+      ok: true,
+      message: `Draft ${d.version} saved. It needs ${d.approvalsRequired} ${d.approvalsRequired === 1 ? "approval" : "approvals"}${d.changedSections.length ? ` (changed: ${d.changedSections.join(", ")})` : ""}.`,
+    };
+  } catch (e) {
+    if (e instanceof z.ZodError)
+      return {
+        ok: false,
+        message: "The policy does not pass validation.",
+        issues: e.issues.slice(0, 12).map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`),
+      };
+    if (e instanceof PolicyError) return { ok: false, message: e.message };
+    throw e;
+  }
+}
+
+export async function approvePolicy(version: string): Promise<{ ok: boolean; message: string }> {
+  const user = await requireUser(["registrar", "dean"]);
+  try {
+    const r = await approveVersion(
+      user,
+      z.string().min(1).max(40).parse(version),
+      (await headers()).get("x-forwarded-for"),
+    );
+    revalidatePath("/admin/policy");
+    return {
+      ok: true,
+      message:
+        r.status === "ACTIVE"
+          ? "Approved and now in force. Affected students are queued for re-evaluation."
+          : `Approved (${r.approvals} of ${r.required}). Waiting for the other approver.`,
+    };
+  } catch (e) {
+    if (e instanceof PolicyError) return { ok: false, message: e.message };
+    throw e;
+  }
+}
+
+export async function resolveRightsRequest(_: unknown, form: FormData): Promise<{ ok: boolean; message: string }> {
+  const user = await requireUser(["registrar", "faculty_mentor"]);
+  const input = z
+    .object({
+      id: z.uuid(),
+      outcome: z.string().max(1000),
+      erase: z.string().optional(),
+    })
+    .safeParse({
+      id: form.get("id"),
+      outcome: String(form.get("outcome") ?? ""),
+      erase: form.get("erase") ?? undefined,
+    });
+  if (!input.success) return { ok: false, message: input.error.issues[0]?.message ?? "Check the form." };
+  try {
+    if (input.data.erase === "yes") await executeErasure(user, input.data.id);
+    else await resolveRequest(user, input.data.id, input.data.outcome);
+  } catch (e) {
+    if (e instanceof RightsError || e instanceof ErasureError) return { ok: false, message: e.message };
+    throw e;
+  }
+  revalidatePath("/admin/requests");
+  return { ok: true, message: "Closed. The student has been told." };
 }

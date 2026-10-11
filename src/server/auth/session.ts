@@ -18,6 +18,7 @@ import { students } from "../db/schema";
 import type { Role } from "../db/schema/enums";
 import { ROLES } from "../db/schema/enums";
 import { logger } from "../logger";
+import { mayViewOutputs } from "../shadow";
 import { auth } from ".";
 import { type ActivityRecord, endActivity, touchActivity } from "./activity";
 
@@ -120,6 +121,8 @@ export async function requireApiUser(roles?: readonly Role[]): Promise<CurrentUs
   const s = await readSession();
   if (s.status !== "active") unauthorized();
   if (roles && !roles.includes(s.user.role)) forbidden();
+  // Shadow mode (§16.2): outputs are for the project team only.
+  if (!mayViewOutputs(s.user)) forbidden();
   return s.user;
 }
 

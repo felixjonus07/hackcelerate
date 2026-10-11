@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { Flame } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -10,146 +11,142 @@ import { EvidenceChip } from "@/components/ui/evidence-chip";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/cn";
-import { score1 } from "@/lib/format";
+import { TRACK_LABELS, TRACK_SHORT } from "@/lib/labels";
 import { requireUser } from "@/server/auth/session";
-import { getLeaderboardData } from "@/server/services/leaderboard";
+import { db } from "@/server/db";
+import { students } from "@/server/db/schema";
+import { TRACK_IDS, type TrackId } from "@/server/policy/schema";
+import { type LeaderboardTab, leaderboard } from "@/server/services/leaderboard";
 
 export const metadata: Metadata = { title: "Leaderboards" };
 
-async function Boards({ searchParams }: { searchParams: Promise<{ track?: string }> }) {
+type Search = Promise<{ track?: string; tab?: string }>;
+
+const TABS: { id: LeaderboardTab; label: string; hint: string }[] = [
+  { id: "evidence", label: "Evidence", hint: "Points for checked evidence. Verified items count in full." },
+  { id: "streak", label: "Streak", hint: "Consecutive days with a valid practice test." },
+];
+
+async function Boards({ searchParams }: { searchParams: Search }) {
   const user = await requireUser();
-  const { track } = await searchParams;
-  const { activeTrack, tracks, entries } = await getLeaderboardData(track);
+  const q = await searchParams;
+  const track: TrackId = (TRACK_IDS as readonly string[]).includes(q.track ?? "")
+    ? (q.track as TrackId)
+    : "corporate_placement";
+  const tab: LeaderboardTab = q.tab === "streak" ? "streak" : "evidence";
+  const [me] =
+    user.role === "student"
+      ? await db.select({ id: students.id }).from(students).where(eq(students.userId, user.id)).limit(1)
+      : [];
+  const board = await leaderboard(track, tab, me?.id ?? null);
+  const href = (t: TrackId, b: LeaderboardTab) => `/leaderboards?track=${t}&tab=${b}`;
 
   return (
-    <div>
-      <nav aria-label="Career tracks" className="mb-6 flex flex-wrap gap-2">
-        {tracks.map((t) => (
+    <div className="grid gap-5">
+      <nav aria-label="Track" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        {TRACK_IDS.map((t) => (
           <Link
-            key={t.id}
-            href={`/leaderboards?track=${t.id}`}
+            key={t}
+            href={href(t, tab)}
+            aria-current={t === track ? "page" : undefined}
             className={cn(
-              "press inline-flex h-10 items-center rounded-full px-5 text-sm font-bold transition-colors",
-              t.id === activeTrack ? "bg-act text-act-ink shadow-sm" : "bg-sand-2 text-ink hover:bg-sand-3",
+              "press shrink-0 rounded-full px-4 py-2 text-sm font-bold",
+              t === track ? "bg-ink text-sand" : "bg-sand-2 text-ink hover:bg-sand-3",
             )}
           >
-            {t.name}
+            {TRACK_SHORT[t]}
           </Link>
         ))}
       </nav>
-
-      {entries.length === 0 ? (
-        <Card>
+      <Card aria-labelledby="board-h">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="board-h" className="text-[1.05rem] font-extrabold">
+              {TRACK_LABELS[track]}
+            </h2>
+            <p className="text-sm text-ink-2">{TABS.find((t) => t.id === tab)?.hint}</p>
+          </div>
+          <div role="tablist" aria-label="Ranking" className="flex gap-1 rounded-full bg-sand p-1">
+            {TABS.map((t) => (
+              <Link
+                key={t.id}
+                role="tab"
+                aria-selected={t.id === tab}
+                href={href(track, t.id)}
+                className={cn(
+                  "rounded-full px-4 py-1.5 text-sm font-bold",
+                  t.id === tab ? "bg-card shadow-card" : "text-ink-2",
+                )}
+              >
+                {t.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+        {board.entries.length === 0 ? (
           <EmptyState
-            title="No opt-ins for this track yet"
+            title="No opt-ins yet"
             action={
               user.role === "student" ? <ButtonLink href="/student/consent">Join from Sharing</ButtonLink> : undefined
             }
           >
-            Leaderboards show only students who chose to join. Joining is off by default and can be reversed at any time
-            in Sharing.
+            Leaderboards show only students who chose to join. Joining is off by default and can be reversed at any
+            time.
           </EmptyState>
-        </Card>
-      ) : (
-        <Card>
-          {/* Phones: stacked cards */}
-          <ul className="divide-y divide-line sm:hidden">
-            {entries.map((e) => (
-              <li key={e.studentId} className="py-4">
+        ) : (
+          <ol className="divide-y divide-line">
+            {board.entries.map((e) => (
+              <li key={e.handle} className={cn("grid gap-2 py-3.5", e.isYou && "-mx-3 rounded-2xl bg-sand px-3")}>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="flex size-7 items-center justify-center rounded-full bg-sand-2 font-black text-ink text-sm">
-                      {e.rank}
-                    </span>
-                    <span className="font-extrabold text-ink">{e.pseudonymousId}</span>
-                  </div>
-                  <span className="tabular font-black text-2xl text-ink">{score1(e.score)}</span>
+                  <p className="min-w-0">
+                    <span className="tabular mr-3 inline-block w-6 font-black">{e.rank}</span>
+                    <span className="font-extrabold">{e.isYou ? "You" : e.handle}</span>{" "}
+                    <span className="text-ink-2">· {e.department}</span>
+                  </p>
+                  <p className="tabular shrink-0 font-bold">
+                    {tab === "streak"
+                      ? `${e.streakDays} ${e.streakDays === 1 ? "day" : "days"}`
+                      : `${e.points} ${e.points === 1 ? "pt" : "pts"}`}
+                  </p>
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-2">
-                  <span>
-                    {e.departmentCode} · Year {e.year}
-                  </span>
-                  {e.streakDays > 0 && (
-                    <Tag kind="low" icon={<Flame aria-hidden className="size-3 text-low" />}>
-                      {e.streakDays}d streak
+                <div className="flex flex-wrap items-center gap-2 pl-9">
+                  {e.streakBadge ? (
+                    <Tag kind="low" icon={<Flame aria-hidden className="size-3.5" />}>
+                      {e.streakDays}-day streak
                     </Tag>
-                  )}
-                  {e.verifiedArtifactsCount > 0 && <EvidenceChip status="VERIFIED" className="text-xs" />}
+                  ) : null}
+                  {e.links.map((l) => (
+                    <a
+                      key={l.url}
+                      href={l.url}
+                      target="_blank"
+                      rel="noopener noreferrer nofollow"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-sm font-semibold ring-1 ring-inset ring-line hover:bg-sand-2"
+                    >
+                      {l.host}
+                      <EvidenceChip status="VERIFIED" />
+                    </a>
+                  ))}
                 </div>
               </li>
             ))}
-          </ul>
-
-          {/* Tablets / desktop: clean table */}
-          <div className="hidden sm:block">
-            <table className="w-full text-left">
-              <caption className="sr-only">Track leaderboard for opted-in students</caption>
-              <thead className="text-sm text-ink-2">
-                <tr>
-                  <th className="pb-3 font-bold w-16">Rank</th>
-                  <th className="pb-3 font-bold">Student</th>
-                  <th className="pb-3 font-bold">Department</th>
-                  <th className="pb-3 font-bold text-center">Streak</th>
-                  <th className="pb-3 font-bold">Verified Evidence</th>
-                  <th className="pb-3 font-bold text-right">Score</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line tabular">
-                {entries.map((e) => (
-                  <tr key={e.studentId}>
-                    <td className="py-3.5 font-black text-ink">
-                      <span className="flex size-7 items-center justify-center rounded-full bg-sand-2 text-sm">
-                        {e.rank}
-                      </span>
-                    </td>
-                    <td className="py-3.5 font-bold text-ink">{e.pseudonymousId}</td>
-                    <td className="py-3.5 text-sm text-ink-2">
-                      {e.departmentCode} (Yr {e.year})
-                    </td>
-                    <td className="py-3.5 text-center">
-                      {e.streakDays > 0 ? (
-                        <Tag kind="low" icon={<Flame aria-hidden className="size-3 text-low" />}>
-                          {e.streakDays}d
-                        </Tag>
-                      ) : (
-                        <span className="text-sm text-ink-2">—</span>
-                      )}
-                    </td>
-                    <td className="py-3.5">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {e.verifiedArtifactsCount > 0 ? (
-                          <>
-                            <EvidenceChip status="VERIFIED" />
-                            <span className="text-xs text-ink-2">({e.verifiedArtifactsCount} verified)</span>
-                          </>
-                        ) : (
-                          <span className="text-sm text-ink-2">—</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3.5 text-right font-black text-xl text-ink">{score1(e.score)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <p className="mt-5 border-t border-line pt-3 text-xs text-ink-2">
-            Leaderboards display pseudonymous IDs only (§4.1). Participation is strictly voluntary and can be toggled in
-            Sharing at any time.
-          </p>
-        </Card>
-      )}
+          </ol>
+        )}
+      </Card>
+      <p className="text-sm text-ink-2">
+        {board.optedIn} {board.optedIn === 1 ? "student has" : "students have"} joined this track. Scores, gaps and
+        support flags are never shown here.
+      </p>
     </div>
   );
 }
 
-export default function LeaderboardsPage({ searchParams }: { searchParams: Promise<{ track?: string }> }) {
+export default function LeaderboardsPage({ searchParams }: { searchParams: Search }) {
   return (
     <AppShell area="auto">
       <PageHeader
         title="Leaderboards"
-        description="Opt-in only. Shows students who chose to share their verified progress on each career track."
+        description="Only students who chose to join appear, and they can leave at any time."
       />
       <Suspense fallback={<PageSkeleton />}>
         <Boards searchParams={searchParams} />

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { rolesOf } from "@/server/api/access";
 import { apiError, handle, json } from "@/server/api/handler";
 import { requireApiUser } from "@/server/auth/session";
 import { COUNSELING_COLUMNS } from "@/server/db/schema/enums";
@@ -6,7 +7,7 @@ import { moveCard } from "@/server/services/counseling";
 
 /** PATCH /api/v1/counseling/cards/{id} — move a card; backward moves need a reason. */
 export const PATCH = handle(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
-  const user = await requireApiUser(["faculty_mentor"]);
+  const user = await requireApiUser(rolesOf("card"));
   const id = z.uuid().parse((await ctx.params).id);
   const b = z
     .object({
