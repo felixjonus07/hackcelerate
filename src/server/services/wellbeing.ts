@@ -25,8 +25,11 @@ export interface WellbeingNudge {
 export const COUNSELING_CENTRE = "Campus Counseling Centre: Block A, Room 12 (synthetic contact)";
 export const EMERGENCY_CONTACT = "Campus Emergency Helpline: 112";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function detectWellbeingNudges(studentId: string): Promise<WellbeingNudge[]> {
   const nudges: WellbeingNudge[] = [];
+  if (!UUID_REGEX.test(studentId)) return nudges;
 
   const [student] = await db.select().from(students).where(eq(students.id, studentId)).limit(1);
   if (!student) return nudges;

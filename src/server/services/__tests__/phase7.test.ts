@@ -20,7 +20,7 @@ async function isDbAvailable(): Promise<boolean> {
 describe("§14.2 Wellbeing Guardrails and Nudges", () => {
   it("never includes persona names, clinical diagnoses, or disciplinary labels in nudges", async () => {
     if (await isDbAvailable()) {
-      const nudges = await detectWellbeingNudges("non-existent-student-id");
+      const nudges = await detectWellbeingNudges("00000000-0000-0000-0000-000000000000");
       expect(nudges).toEqual([]);
     }
 
