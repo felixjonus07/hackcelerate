@@ -20,7 +20,12 @@ import { runMaintenance } from "../server/services/maintenance";
 import { ParentalConsentRequired } from "../server/services/parental";
 import { verifyArtifact } from "../server/verification";
 
-const connection = createRedis();
+// BullMQ workers keep blocking Redis commands open for several seconds. createRedis() defaults to a 3 s command
+// timeout and stops reconnecting after 3 tries: right for web requests, but it makes every blocking call fail here.
+const connection = createRedis({
+  commandTimeout: undefined,
+  retryStrategy: (times) => Math.min(times * 200, 3000),
+});
 const concurrency = 8; // §10.3: nightly batch at concurrency 8
 
 const workers = [
