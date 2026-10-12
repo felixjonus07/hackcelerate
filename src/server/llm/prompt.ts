@@ -3,6 +3,7 @@
  * policy, facts, task. Student-written text is sanitized and fenced as
  * untrusted data. Names, roll numbers and contacts are never included (§9.4).
  */
+import { LANGUAGE_AVOID, LANGUAGE_PREFER } from "@/lib/language";
 import type { Policy } from "../policy/schema";
 import type { Evaluation, EvidenceItem } from "../rules/types";
 import { NARRATIVE_JSON_SCHEMA } from "./schema";
@@ -26,16 +27,32 @@ You receive one validated evaluation record as JSON. Follow these rules without 
 6. Keep the narrative within the length limits in the schema.
 7. Return only JSON that matches the schema. No preamble, no commentary, no Markdown.`;
 
-/** Strip markup and cap length before any student text reaches the model (§9.2). */
+/**
+ * Strip markup and cap length before any student text reaches the model (§9.2). Comments, control
+ * and zero-width characters are removed, and the fence markers of the facts block (`<<<FACTS`,
+ * `FACTS>>>`) can never appear inside student text, so it cannot close the data block early.
+ */
 export function sanitizeUntrusted(
   text: string | null | undefined,
   maxChars: number,
+  /** Words that identify the student (their own name), removed wherever they appear. */
+  names: readonly string[] = [],
 ): { text: string; truncated: boolean } {
+  const nameRe = names.filter((n) => n.length > 1).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const stripped = (text ?? "")
+    .normalize("NFKC")
+    .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/[`*_#>~[\]]/g, " ")
+    .replace(/[\p{Cc}\p{Cf}]/gu, " ")
+    .replace(/<<<|>>>|\bFACTS\b/gi, " ")
+    // Contact details and roll numbers never leave the system, even when the student typed them (§9.4).
+    .replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, "(contact removed)")
+    .replace(/\+?\d[\d\s-]{8,}\d/g, "(contact removed)")
+    .replace(/\b[a-z]{2,5}\d{4,8}\b/gi, "(contact removed)")
+    .replace(/[`*_#>~[\]{}]/g, " ")
+    .replace(nameRe.length ? new RegExp(`\\b(?:${nameRe.join("|")})\\b`, "gi") : /(?!)/g, "(name removed)")
     .replace(/\s+/g, " ")
     .trim();
   return {
@@ -48,6 +65,8 @@ export interface FactsInput {
   evaluationId: string;
   pseudonymousId: string;
   departmentName: string;
+  /** The student's own name parts, removed from any free text before it reaches the model (§9.4). */
+  redactNames?: readonly string[];
   evaluation: Evaluation;
   evidence: (EvidenceItem & { description?: string | null })[];
   remediation: {
@@ -62,7 +81,7 @@ export interface FactsLayer {
   evaluation_id: string;
   student: string;
   department: string;
-  facts: { id: string; fact: string; value?: string | number }[];
+  facts: { id: string; fact: string; value?: string | number; status?: string }[];
   untrusted_artifact_text: { id: string; text: string }[];
   remediation_library: FactsInput["remediation"];
 }
@@ -101,6 +120,7 @@ export function buildFacts(input: FactsInput, policy: Policy): { layer: FactsLay
     ...input.evidence.map((ev) => ({
       id: ev.id,
       fact: `${ev.label} — ${ev.status.replace("_", " ").toLowerCase()}`,
+      status: ev.status,
     })),
     ...e.pivot.reasons.map((r, i) => ({ id: `pivot:${i + 1}`, fact: r })),
   ];
@@ -108,7 +128,7 @@ export function buildFacts(input: FactsInput, policy: Policy): { layer: FactsLay
   const untrusted = input.evidence
     .filter((ev) => ev.description)
     .map((ev) => {
-      const s = sanitizeUntrusted(ev.description, policy.llm.free_text_max_chars);
+      const s = sanitizeUntrusted(ev.description, policy.llm.free_text_max_chars, input.redactNames);
       if (s.truncated) truncations.push(ev.id);
       return { id: ev.id, text: s.text };
     });
@@ -128,30 +148,7 @@ export function buildFacts(input: FactsInput, policy: Policy): { layer: FactsLay
 export function buildMessages(facts: FactsLayer, policy: Policy) {
   const policyLayer = {
     policy_version: policy.policy_version,
-    language_standards: {
-      avoid: [
-        "Drifting student",
-        "At risk",
-        "Detention threat",
-        "Failing",
-        "Weak in aptitude",
-        "Lazy",
-        "No effort",
-        "Your chances are zero",
-        "You must",
-        "Top student",
-        "Topper",
-      ],
-      prefer: [
-        "A student who has not yet chosen a direction",
-        "Attendance needs attention this term",
-        "Not yet evidenced; building toward the target",
-        "Activity has been low over the last 60 days",
-        "The current plan leaves a large gap to the target date",
-        "One option is to",
-        "Strong academic record",
-      ],
-    },
+    language_standards: { avoid: LANGUAGE_AVOID, prefer: LANGUAGE_PREFER },
     target_days_range: policy.llm.target_days_range,
     max_action_steps: policy.llm.max_action_steps,
   };

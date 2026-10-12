@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { loadPolicyFile } from "../../policy/load";
+import { loadPolicyFile } from "../../policy/file";
 import type { VerificationStatus } from "../../policy/schema";
 import { VERIFICATION_STATUSES } from "../../policy/schema";
 import { attendanceScore, cgpaScore, leastSquaresSlope, ratingScore, scoreTrack, speedScore, streakScore } from "..";
@@ -21,7 +21,8 @@ describe("§5.2 normalization", () => {
   it("speed, streak and rating scores", () => {
     expect(speedScore(30, 60)).toBe(50);
     expect(speedScore(30, 10)).toBe(100);
-    expect(streakScore(45)).toBe(100);
+    expect(streakScore(45, 30)).toBe(100);
+    expect(streakScore(15, 30)).toBe(50);
     expect(ratingScore(3.5)).toBe(62.5);
   });
   it("least-squares slope", () => {

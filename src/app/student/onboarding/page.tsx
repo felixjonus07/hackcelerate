@@ -4,9 +4,12 @@ import { Suspense } from "react";
 import { OnboardingWizard } from "@/components/onboarding/wizard";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { requireUser } from "@/server/auth/session";
+import { CONSENT_RECIPIENTS, CONSENTABLE } from "@/server/consent/matrix";
 import { db } from "@/server/db";
 import { aspirations, students } from "@/server/db/schema";
 import { getActivePolicy } from "@/server/policy/load";
+import { currentConsents } from "@/server/services/consent";
+import { onboardingState } from "@/server/services/onboarding";
 
 export const metadata: Metadata = { title: "Set up your passport" };
 
@@ -21,9 +24,20 @@ async function Wizard() {
         .orderBy(desc(aspirations.createdAt))
         .limit(1)
     : [];
-  const policy = getActivePolicy();
+  const policy = await getActivePolicy();
+  const [state, consent] = student
+    ? await Promise.all([onboardingState(student.id), currentConsents(student.id)])
+    : [null, {}];
   return (
     <OnboardingWizard
+      startStep={state?.onboardedAt ? 0 : (state?.step ?? 0)}
+      noticeAcknowledged={state?.noticeAcknowledged ?? false}
+      noticeVersion={policy.notice.version}
+      consent={consent}
+      categories={CONSENTABLE as Record<string, string>}
+      recipients={[...CONSENT_RECIPIENTS]}
+      evidenceCount={state?.evidenceCount ?? 0}
+      hasEvaluation={state?.hasEvaluation ?? false}
       baseline={
         student
           ? {
@@ -31,6 +45,7 @@ async function Wizard() {
               attendance: student.attendancePct,
               year: student.year,
               department: policy.department_standards[student.departmentCode]?.name ?? student.departmentCode,
+              importedOn: student.erpImportedAt ? student.erpImportedAt.toISOString().slice(0, 10) : null,
             }
           : null
       }

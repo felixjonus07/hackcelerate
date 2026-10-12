@@ -47,7 +47,7 @@ export const POST = handle(async (req: Request) => {
         })),
       ],
     }),
-    getActivePolicy(),
+    await getActivePolicy(),
   );
   return json({
     trackScore: result.trackScore.score,

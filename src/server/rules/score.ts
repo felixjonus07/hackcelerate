@@ -23,6 +23,8 @@ export function scoreTrack(track: TrackId, facts: StudentFacts, policy: Policy):
       contribution: (r.score * weight) / 100,
       evidenceRefs: r.evidenceRefs,
       dataGaps: r.dataGaps,
+      ...(r.missingItems ? { missingItems: r.missingItems } : {}),
+      ...(r.subMeasures?.length ? { subMeasures: r.subMeasures } : {}),
       calculation: r.calculation,
     };
   });
@@ -47,6 +49,10 @@ export function scoreTrack(track: TrackId, facts: StudentFacts, policy: Policy):
 
 export function confidenceFor(gaps: number, reduced: number, facts: StudentFacts, policy: Policy): Confidence {
   if (gaps > policy.confidence.medium_max_gaps || (facts.recentSourceFailures ?? 0) > 0) return "LOW";
+  // More than two missing attendance weeks cap confidence at MEDIUM, and further still at LOW (§4.3).
+  const cap = facts.dataQuality?.attendanceCap;
+  if (cap === "LOW") return "LOW";
+  if (cap === "MEDIUM") return "MEDIUM";
   if (gaps === 0 && reduced === 0) return "HIGH";
   return "MEDIUM";
 }

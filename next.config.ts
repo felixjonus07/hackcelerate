@@ -3,12 +3,15 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV !== "production";
 
 /**
- * Baseline Content Security Policy. Next.js injects inline bootstrap scripts,
- * so script-src keeps 'unsafe-inline' until nonce-based CSP lands (PLAN.md Phase 9).
+ * Content Security Policy. Next.js streams inline scripts (the React Server Components payload) in the prerendered
+ * shell that Cache Components produces; those cannot carry a per-request nonce or a fixed hash, so script-src keeps
+ * 'unsafe-inline'. Tried on a production build (README, 2026-10-12): a nonce policy and a strict 'self' policy both
+ * blocked hydration. Inline event-handler attributes, plugins, framing and form targets stay closed.
  */
 const csp = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  "script-src-attr 'none'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",

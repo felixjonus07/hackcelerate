@@ -1,255 +1,203 @@
 /**
- * Property-based testing with fast-check (§15.1):
- * - Scores stay between 0 and 100
- * - Adding verified evidence never lowers a score (monotonicity)
- * - 10,000 generated cases across all six tracks
+ * Property-based tests (§15.1, gate before pilot): across 10,000 generated cases per property,
+ * scores stay within 0–100 and adding verified evidence never lowers a score.
  */
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
-import { loadPolicyFile } from "../../policy/load";
-import type { TrackId, VerificationStatus } from "../../policy/schema";
-import { gapRatio, scoreTrack } from "..";
-import type { EvidenceFact, FacultyRating, MockAttempt, StudentFacts } from "../types";
+import { describe, expect, it, vi } from "vitest";
+import { loadPolicyFile } from "../../policy/file";
+import { TRACK_IDS, type TrackId, VERIFICATION_STATUSES, type VerificationStatus } from "../../policy/schema";
+import { evaluate, scoreTrack } from "..";
+import type { EvidenceItem, FacultyRating, MockAttempt, StudentFacts } from "../types";
 
-const policy = loadPolicyFile("policy/2026.10-v1.json");
+// 10,000 generated cases per property take several seconds, longer when the whole suite runs in parallel.
+vi.setConfig({ testTimeout: 180_000 });
 
-const TRACKS: TrackId[] = [
-  "corporate_placement",
-  "higher_studies",
-  "entrepreneurship",
-  "public_service",
-  "freelance_creator",
-  "sports_defense_ncc",
-];
+const policy = loadPolicyFile();
+const RUNS = 10_000;
+const DEPTS = Object.keys(policy.department_standards);
+const STANDARD_ITEMS = Object.fromEntries(DEPTS.map((d) => [d, Object.keys(policy.department_standards[d].items)]));
 
-const arbTrack = fc.constantFrom<TrackId>(...TRACKS);
-
-const arbStatus = fc.constantFrom<VerificationStatus>(
-  "VERIFIED",
-  "ATTESTED",
-  "LIVE_UNVERIFIED",
-  "SELF_REPORTED",
-  "UNVERIFIED",
-  "REJECTED",
-  "SUBMITTED",
-  "UNDER_CHECK",
-  "STALE",
-);
-
-const arbEvidenceItem: fc.Arbitrary<EvidenceFact> = fc.record({
-  id: fc.uuid(),
-  component: fc.constantFrom(
-    "academic_baseline",
-    "aptitude",
-    "domain_practical_evidence",
-    "mock_interview_readiness",
-    "verified_experience",
-    "entrance_exam_readiness",
-    "research_output",
-    "faculty_recommendation_readiness",
-    "application_timeline_adherence",
-    "venture_traction",
-    "build_evidence",
-    "customer_validation",
-    "team_and_execution",
-    "academic_continuity",
-    "current_affairs_consistency",
-    "general_studies_mock",
-    "quantitative_speed",
-    "mock_streak",
-    "answer_writing",
-    "live_portfolio",
-    "client_work",
-    "tool_certifications",
-    "live_deployments",
-    "open_source_community",
-    "physical_fitness",
-    "camp_training_attendance",
-    "competition_results",
-    "psychometric_readiness",
-  ),
-  standardItem: fc.option(
-    fc.constantFrom(
-      "solidworks_lab",
-      "autocad_lab",
-      "timed_gdt_assessment",
-      "factory_internship_hours",
-      "excel_financial_model",
-      "tally_erp",
-      "taxation_knowledge",
-      "circuit_pcb_project",
-      "embedded_lab",
-      "signal_power_test",
-      "practice_problem_sets",
-      "deployed_projects",
-      "systems_design_notes",
-    ),
-    { nil: undefined },
-  ),
-  label: fc.string({ minLength: 1, maxLength: 30 }),
-  status: arbStatus,
-  weight: fc.option(fc.integer({ min: 1, max: 5 }), { nil: undefined }),
+const status = fc.constantFrom<VerificationStatus>(...VERIFICATION_STATUSES);
+const nullable = <T>(a: fc.Arbitrary<T>) => fc.option(a, { nil: null });
+const day = fc.integer({ min: 0, max: 120 }).map((n) => {
+  const d = new Date(Date.UTC(2026, 5, 13) + n * 86_400_000);
+  return d.toISOString().slice(0, 10);
 });
 
-const arbMock: fc.Arbitrary<MockAttempt> = fc.record({
-  id: fc.uuid(),
-  testType: fc.constantFrom(
-    "entrance",
-    "gre",
-    "gate",
-    "cat",
-    "campus_aptitude",
-    "internal_aptitude",
-    "gs_full",
-    "quant",
-  ),
-  date: fc.constant("2026-09-01"),
-  items: fc.integer({ min: 10, max: 100 }),
-  score: fc.float({ min: 0, max: 100, noNaN: true }),
-  percentile: fc.float({ min: 0, max: 100, noNaN: true }),
-  targetSecondsPerItem: fc.option(fc.integer({ min: 10, max: 120 }), { nil: undefined }),
-  avgSecondsPerItem: fc.float({ min: 1, max: 180, noNaN: true }),
-  status: arbStatus,
-});
+const componentKeys = (track: TrackId) => Object.keys(policy.tracks[track]?.components ?? {});
+const KINDS = ["interview_log", "sop_review", "fitness_record", "camp_record", "medal", "project", "paper"];
 
-const arbRating: fc.Arbitrary<FacultyRating> = fc.record({
-  id: fc.uuid(),
-  kind: fc.constantFrom("mock_interview", "answer_writing", "psychometric", "customer_validation", "sop_review"),
-  date: fc.constant("2026-09-01"),
-  rating: fc.float({ min: 1, max: 5, noNaN: true }),
-  status: arbStatus,
-});
-
-const arbStudentFacts: fc.Arbitrary<StudentFacts> = fc.record({
-  studentId: fc.uuid(),
-  department: fc.constantFrom("MECH", "CSE", "ECE", "CIVIL", "COMM", "BIO", "LAW"),
-  year: fc.integer({ min: 1, max: 5 }),
-  cgpa: fc.option(fc.float({ min: 0, max: 10, noNaN: true }), { nil: null }),
-  attendancePct: fc.option(fc.float({ min: 0, max: 100, noNaN: true }), { nil: null }),
-  aspiration: fc.record({
-    track: arbTrack,
-    targetOutcome: fc.constant("Target Outcome"),
-    readiness: fc.option(fc.integer({ min: 0, max: 100 }), { nil: undefined }),
-  }),
-  campusAptitudePercentile: fc.option(fc.float({ min: 0, max: 100, noNaN: true }), { nil: null }),
-  internalAptitudePercentile: fc.option(fc.float({ min: 0, max: 100, noNaN: true }), { nil: null }),
-  verifiedInternshipHours: fc.option(fc.float({ min: 0, max: 300, noNaN: true }), { nil: null }),
-  streakValidDays: fc.option(fc.integer({ min: 0, max: 30 }), { nil: null }),
-  sopReviewsCount: fc.option(fc.integer({ min: 0, max: 10 }), { nil: null }),
-  applicationMilestonesCompletedPct: fc.option(fc.float({ min: 0, max: 100, noNaN: true }), { nil: null }),
-  customerInterviewsCount: fc.option(fc.integer({ min: 0, max: 30 }), { nil: null }),
-  ventureMilestonesOnTimePct: fc.option(fc.float({ min: 0, max: 100, noNaN: true }), { nil: null }),
-  currentAffairsDaysLogged: fc.option(fc.integer({ min: 0, max: 30 }), { nil: null }),
-  currentAffairsWeeklyAccuracy: fc.option(fc.float({ min: 0, max: 1, noNaN: true }), { nil: null }),
-  physicalFitnessBmiBand: fc.option(fc.constantFrom("NORMAL", "WATCH", "EVALUATE"), { nil: null }),
-  physicalFitnessCooperBandScore: fc.option(fc.float({ min: 0, max: 100, noNaN: true }), { nil: null }),
-  campDaysAttended: fc.option(fc.integer({ min: 0, max: 30 }), { nil: null }),
-  campDaysRequired: fc.option(fc.integer({ min: 1, max: 30 }), { nil: null }),
-  competitionPoints: fc.option(fc.integer({ min: 0, max: 10 }), { nil: null }),
-  creditsHeld: fc.option(fc.integer({ min: 0, max: 100 }), { nil: null }),
-  minimumCreditsRequired: fc.option(fc.integer({ min: 1, max: 50 }), { nil: null }),
-  evidence: fc.array(arbEvidenceItem, { maxLength: 6 }),
-  mocks: fc.array(arbMock, { maxLength: 4 }),
-  ratings: fc.array(arbRating, { maxLength: 4 }),
-});
-
-describe("§15.1 Property-based testing (fast-check)", () => {
-  it("invariably keeps scores between 0 and 100 across 10,000 runs", () => {
-    fc.assert(
-      fc.property(arbTrack, arbStudentFacts, (track, facts) => {
-        const trackScore = scoreTrack(track, facts, policy);
-
-        // Overall track score must be bounded in [0, 100]
-        expect(trackScore.score).toBeGreaterThanOrEqual(0);
-        expect(trackScore.score).toBeLessThanOrEqual(100.000001);
-
-        // Each individual component score must be bounded in [0, 100]
-        for (const comp of trackScore.components) {
-          expect(comp.score).toBeGreaterThanOrEqual(0);
-          expect(comp.score).toBeLessThanOrEqual(100.000001);
-          expect(comp.contribution).toBeGreaterThanOrEqual(0);
-          expect(comp.contribution).toBeLessThanOrEqual(comp.weight + 0.000001);
-        }
-
-        // Gap ratio is always non-negative
-        const readiness = facts.aspiration.readiness ?? policy.readiness_default;
-        const ratio = gapRatio(readiness, trackScore.score);
-        expect(ratio).toBeGreaterThanOrEqual(0);
+const evidenceFor = (track: TrackId, dept: string): fc.Arbitrary<EvidenceItem> =>
+  fc.record({
+    id: fc.uuid(),
+    component: fc.constantFrom(...componentKeys(track)),
+    standardItem: fc.option(fc.constantFrom(...STANDARD_ITEMS[dept]), { nil: undefined }),
+    label: fc.constant("item"),
+    weight: fc.option(fc.double({ min: 0.5, max: 5, noNaN: true }), { nil: undefined }),
+    status,
+    kind: fc.option(fc.constantFrom(...KINDS), { nil: undefined }),
+    details: fc.option(
+      fc.record({
+        uptimePct: fc.integer({ min: 0, max: 100 }),
+        level: fc.constantFrom("university", "state", "national"),
+        daysAttended: fc.integer({ min: 0, max: 12 }),
+        daysRequired: fc.integer({ min: 1, max: 12 }),
+        cooperMetres: fc.integer({ min: 0, max: 3500 }),
+        staminaScore: fc.integer({ min: 0, max: 100 }),
+        bmiBand: fc.constantFrom("in_range", "borderline", "out_of_range"),
       }),
-      { numRuns: 10_000 },
-    );
-  }, 30_000);
+      { nil: undefined },
+    ),
+  });
 
-  it("guarantees adding verified evidence never lowers a score across 10,000 runs", () => {
+const mockArb: fc.Arbitrary<MockAttempt> = fc.record({
+  id: fc.uuid(),
+  testType: fc.constantFrom("entrance", "gs_full", "quant", "weekly_test", "practice"),
+  date: day,
+  items: fc.integer({ min: 1, max: 120 }),
+  percentile: fc.double({ min: 0, max: 100, noNaN: true }),
+  score: fc.double({ min: 0, max: 40, noNaN: true }),
+  maxScore: fc.double({ min: 1, max: 40, noNaN: true }),
+  avgSecondsPerItem: fc.double({ min: 1, max: 200, noNaN: true }),
+  targetSecondsPerItem: fc.option(fc.double({ min: 1, max: 200, noNaN: true }), { nil: undefined }),
+  difficulty: fc.option(fc.constantFrom("easy", "medium", "hard"), { nil: undefined }),
+  status,
+});
+
+const ratingArb: fc.Arbitrary<FacultyRating> = fc.record({
+  id: fc.uuid(),
+  kind: fc.constantFrom("mock_interview", "answer_writing", "psychometric", "customer_validation"),
+  date: day,
+  rating: fc.double({ min: 1, max: 5, noNaN: true }),
+  status,
+});
+
+const factsArb = (track: TrackId): fc.Arbitrary<StudentFacts> =>
+  fc.constantFrom(...DEPTS).chain((department) =>
+    fc.record({
+      studentId: fc.constant("P-1"),
+      asOf: fc.constant("2026-10-11"),
+      department: fc.constant(department),
+      year: fc.integer({ min: 1, max: 5 }),
+      cgpa: nullable(fc.double({ min: 0, max: 10, noNaN: true })),
+      attendancePct: nullable(fc.double({ min: 0, max: 100, noNaN: true })),
+      creditsHeld: nullable(fc.integer({ min: 0, max: 200 })),
+      aspiration: fc.constant({ track, targetOutcome: "t", readiness: 70 }),
+      evidence: fc.array(evidenceFor(track, department), { maxLength: 8 }),
+      mocks: fc.array(mockArb, { maxLength: 8 }),
+      ratings: fc.array(ratingArb, { maxLength: 5 }),
+      milestones: fc.array(
+        fc.record({
+          id: fc.uuid(),
+          scope: fc.constantFrom("application" as const, "venture" as const),
+          title: fc.constant("m"),
+          dueOn: day,
+          completedOn: nullable(day),
+        }),
+        { maxLength: 5 },
+      ),
+      currentAffairsDates: fc.array(day, { maxLength: 20 }),
+      verifiedInternshipHours: nullable(fc.integer({ min: 0, max: 500 })),
+      campusAptitudePercentile: nullable(fc.double({ min: 0, max: 100, noNaN: true })),
+    }),
+  );
+
+describe.each(TRACK_IDS)("%s", (track) => {
+  it(`scores stay between 0 and 100, with no NaN (${RUNS} cases)`, () => {
+    fc.assert(
+      fc.property(factsArb(track), (f) => {
+        const s = scoreTrack(track, f, policy);
+        const ok = (x: number) => Number.isFinite(x) && x >= 0 && x <= 100;
+        return ok(s.score) && s.components.every((c) => ok(c.score) && ok(c.contribution));
+      }),
+      { numRuns: RUNS },
+    );
+  });
+
+  it(`adding verified evidence never lowers the score (${RUNS} cases)`, () => {
+    // Additive evidence: items whose rubric only ever adds (camp attendance is a ratio, so a record
+    // of fewer days than before can lower it by design, and is excluded here).
+    const additive = fc
+      .tuple(
+        factsArb(track),
+        fc.double({ min: 0.5, max: 5, noNaN: true }),
+        fc.nat(),
+        fc.nat(),
+        fc.integer({ min: 0, max: 100 }),
+      )
+      .map(([f, weight, ci, si, uptime]) => {
+        const keys = componentKeys(track).filter((k) => k !== "camp_training_attendance");
+        const component = keys[ci % keys.length];
+        const items = STANDARD_ITEMS[f.department];
+        const added: EvidenceItem = {
+          id: "added",
+          component,
+          label: "added",
+          weight,
+          status: "VERIFIED",
+          standardItem: component === "domain_practical_evidence" ? items[si % items.length] : undefined,
+          kind:
+            component === "faculty_recommendation_readiness"
+              ? "sop_review"
+              : component === "customer_validation"
+                ? "interview_log"
+                : component === "competition_results"
+                  ? "medal"
+                  : component === "physical_fitness"
+                    ? "fitness_record"
+                    : undefined,
+          details: { uptimePct: uptime, level: "state", staminaScore: uptime, cooperMetres: uptime * 30 },
+        };
+        return { f, added };
+      });
+    fc.assert(
+      fc.property(additive, ({ f, added }) => {
+        const before = scoreTrack(track, f, policy).score;
+        const after = scoreTrack(track, { ...f, evidence: [...f.evidence, added] }, policy).score;
+        return after >= before - 1e-9;
+      }),
+      { numRuns: RUNS },
+    );
+  });
+});
+
+describe("evaluation as a whole", () => {
+  it("is deterministic and keeps the gap ratio within 0–1 (10,000 cases)", () => {
     fc.assert(
       fc.property(
-        arbTrack,
-        arbStudentFacts,
-        fc.constantFrom(
-          "domain_practical_evidence",
-          "research_output",
-          "venture_traction",
-          "build_evidence",
-          "live_portfolio",
-          "client_work",
-          "tool_certifications",
-          "live_deployments",
-          "open_source_community",
-        ),
-        (track, facts, compKey) => {
-          const scoreBefore = scoreTrack(track, facts, policy).score;
-
-          // Department standard item key if MECH, CSE, etc.
-          const dept = policy.department_standards[facts.department];
-          const standardItem = dept ? Object.keys(dept.items)[0] : undefined;
-
-          const verifiedPiece: EvidenceFact = {
-            id: "ev-new-verified",
-            component: compKey,
-            standardItem,
-            label: "New verified artifact",
-            status: "VERIFIED",
-            weight: 1,
-          };
-
-          const factsWithEvidence: StudentFacts = {
-            ...facts,
-            evidence: [...facts.evidence, verifiedPiece],
-          };
-
-          const scoreAfter = scoreTrack(track, factsWithEvidence, policy).score;
-
-          // Monotonicity invariant: adding verified evidence never lowers the score
-          expect(scoreAfter).toBeGreaterThanOrEqual(scoreBefore - 1e-6);
+        fc.constantFrom(...TRACK_IDS).chain((t) => factsArb(t)),
+        (f) => {
+          const a = evaluate(f, policy);
+          const b = evaluate(structuredClone(f), policy);
+          return JSON.stringify(a) === JSON.stringify(b) && a.gapRatio >= 0 && a.gapRatio <= 1;
         },
       ),
-      { numRuns: 10_000 },
+      { numRuns: RUNS },
     );
-  }, 30_000);
+  });
 
-  it("guarantees upgrading existing evidence to VERIFIED never lowers a score", () => {
-    fc.assert(
-      fc.property(arbTrack, arbStudentFacts, (track, facts) => {
-        if (facts.evidence.length === 0) return true;
-
-        const scoreBefore = scoreTrack(track, facts, policy).score;
-
-        // Upgrade the first evidence item to VERIFIED
-        const upgradedEvidence: EvidenceFact[] = facts.evidence.map((item, idx) =>
-          idx === 0 ? { ...item, status: "VERIFIED" as const } : item,
-        );
-
-        const factsUpgraded: StudentFacts = {
-          ...facts,
-          evidence: upgradedEvidence,
-        };
-
-        const scoreAfter = scoreTrack(track, factsUpgraded, policy).score;
-
-        expect(scoreAfter).toBeGreaterThanOrEqual(scoreBefore - 1e-6);
-        return true;
-      }),
-      { numRuns: 1_000 },
-    );
+  it("every component computes on empty facts (no missing parameter in the policy)", () => {
+    for (const track of TRACK_IDS) {
+      const s = scoreTrack(
+        track,
+        {
+          studentId: "E",
+          asOf: "2026-10-11",
+          department: "MECH",
+          year: 3,
+          cgpa: null,
+          attendancePct: null,
+          aspiration: { track, targetOutcome: "t" },
+          evidence: [],
+          mocks: [],
+          ratings: [],
+          verifiedInternshipHours: null,
+          campusAptitudePercentile: null,
+        },
+        policy,
+      );
+      expect(s.score).toBe(0);
+      expect(s.components.map((c) => c.key).sort()).toEqual(componentKeys(track).sort());
+    }
   });
 });

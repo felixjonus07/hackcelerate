@@ -1,11 +1,19 @@
 "use client";
 import {
+  Bell,
   BookOpenCheck,
+  CalendarCheck,
   ClipboardCheck,
+  ClipboardList,
   Columns3,
+  Database,
   FileBarChart,
+  FileCheck2,
   Gauge,
+  Handshake,
   ListChecks,
+  Rocket,
+  ScrollText,
   Share2,
   SlidersHorizontal,
   Trophy,
@@ -27,6 +35,14 @@ const ICONS = {
   audit: FileBarChart,
   students: Users,
   leaderboard: Trophy,
+  evidence: FileCheck2,
+  attendance: CalendarCheck,
+  placement: Handshake,
+  traction: Rocket,
+  policy: ScrollText,
+  ingestion: Database,
+  requests: ClipboardList,
+  notices: Bell,
 };
 
 export function NavLink({ item, variant }: { item: NavItem; variant: "side" | "bottom" }) {
@@ -39,12 +55,12 @@ export function NavLink({ item, variant }: { item: NavItem; variant: "side" | "b
         href={item.href}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "press flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-[0.72rem] font-bold",
+          "press flex min-w-16 flex-1 shrink-0 flex-col items-center gap-1 rounded-2xl py-2 text-[0.72rem] font-bold",
           active ? "text-act" : "text-ink-2",
         )}
       >
         <Icon aria-hidden className="size-5" strokeWidth={active ? 2.4 : 2} />
-        <span className="truncate">{item.label}</span>
+        <span className="truncate">{item.short ?? item.label}</span>
       </Link>
     );
   return (

@@ -4,6 +4,7 @@
  */
 import type { AegLevel, PersonaId, Policy, TrackId } from "../policy/schema";
 import { AEG_LEVELS, TRACK_IDS } from "../policy/schema";
+import { streakGapDays } from "./integrity";
 import { leastSquaresSlope } from "./normalize";
 import { scoreTrack } from "./score";
 import type { PersonaMatch, StudentFacts, TrendLabel, WeeklySignal } from "./types";
@@ -127,7 +128,8 @@ export function matchPersonas(
   }
 
   const [lo, hi] = policy.attendance.watch_band_pct;
-  const watchBand = att != null && att >= lo && att <= hi;
+  // The band is stated in whole percents ("65 to 74"); a fractional 74.9 is still below the requirement, so it is watched too.
+  const watchBand = att != null && att >= lo && att < hi + 1;
   return { matches, attendanceCriticalFlag, watchBand };
 }
 
@@ -164,7 +166,7 @@ export function trend(facts: StudentFacts, policy: Policy) {
   else if (labels.includes("WORSENING")) overall = "WORSENING";
   else if (labels.includes("IMPROVING")) overall = "IMPROVING";
   else overall = "STABLE";
-  const gaps = facts.streakGapDays14;
+  const gaps = facts.asOf ? streakGapDays(facts.mocks, facts.asOf, policy) : null;
   const streakNote =
     gaps != null && gaps >= policy.trend.streak_gap_note_days
       ? `${gaps} gap days in the last ${policy.trend.streak_window_days}`

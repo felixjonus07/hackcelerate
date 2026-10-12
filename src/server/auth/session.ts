@@ -7,6 +7,7 @@
  * its idle window is revoked and the caller is sent to sign-in (§13.2).
  */
 import "server-only";
+import { getSessionCookie } from "better-auth/cookies";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { forbidden, redirect, unauthorized } from "next/navigation";
@@ -17,6 +18,7 @@ import { students } from "../db/schema";
 import type { Role } from "../db/schema/enums";
 import { ROLES } from "../db/schema/enums";
 import { logger } from "../logger";
+import { mayViewOutputs } from "../shadow";
 import { auth } from ".";
 import { type ActivityRecord, endActivity, touchActivity } from "./activity";
 
@@ -43,7 +45,20 @@ type SessionState =
 /** One lookup per request (React cache), shared by every caller in the render. */
 const readSession = cache(async (): Promise<SessionState> => {
   const h = await headers();
-  const s = await auth.api.getSession({ headers: h });
+  // Fast path: if no session cookie exists, avoid hitting DB/Redis entirely.
+  const cookie = getSessionCookie(h);
+  if (!cookie) return { status: "none" };
+
+  let s: Awaited<ReturnType<typeof auth.api.getSession>> = null;
+  try {
+    s = await Promise.race([
+      auth.api.getSession({ headers: h }),
+      new Promise<null>((_, reject) => setTimeout(() => reject(new Error("auth timeout")), 3000)),
+    ]);
+  } catch (err) {
+    logger.warn({ err: String(err) }, "getSession failed or timed out");
+    return { status: "none" };
+  }
   if (!s) return { status: "none" };
 
   const activity: ActivityRecord | null = await touchActivity(s.session.id);
@@ -106,6 +121,8 @@ export async function requireApiUser(roles?: readonly Role[]): Promise<CurrentUs
   const s = await readSession();
   if (s.status !== "active") unauthorized();
   if (roles && !roles.includes(s.user.role)) forbidden();
+  // Shadow mode (§16.2): outputs are for the project team only.
+  if (!mayViewOutputs(s.user)) forbidden();
   return s.user;
 }
 

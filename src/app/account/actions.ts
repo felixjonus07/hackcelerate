@@ -6,6 +6,7 @@ import { z } from "zod";
 import { audit } from "@/server/audit/log";
 import { auth } from "@/server/auth";
 import { requireUser } from "@/server/auth/session";
+import { setPreference } from "@/server/notifications/digest";
 
 export async function revokeSession(token: string) {
   const user = await requireUser();
@@ -89,4 +90,30 @@ export async function changePassword(_: unknown, form: FormData): Promise<{ ok: 
   });
   revalidatePath("/account/security");
   return { ok: true, message: "Password changed. Every other device has been signed out." };
+}
+
+/** Where digests go (§10.1): email by default; WhatsApp only when the person opts in with their own number. */
+export async function savePreference(
+  channel: "email" | "whatsapp",
+  optedIn: boolean,
+  phone?: string,
+): Promise<{ ok: boolean; message: string }> {
+  const user = await requireUser();
+  try {
+    await setPreference(user.id, z.enum(["email", "whatsapp"]).parse(channel), optedIn, phone?.trim() || null);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Couldn't save that" };
+  }
+  await audit({
+    actorUserId: user.id,
+    actorRole: user.role,
+    action: optedIn ? `notifications.${channel}.opt_in` : `notifications.${channel}.opt_out`,
+    entityType: "user",
+    entityId: user.id,
+    purpose: "notification_preferences",
+    result: "allowed",
+  });
+  revalidatePath("/student/consent");
+  revalidatePath("/account/security");
+  return { ok: true, message: optedIn ? "Switched on." : "Switched off." };
 }

@@ -1,300 +1,175 @@
 /**
- * Data-quality rules (§4.3) as pure functions.
- * Validates ERP imports, mock attempts, artifact URLs and student demographics.
+ * Data-quality rules (§4.3) as pure functions, one block per row of the table.
+ * Every limit comes from `policy.data_quality`; nothing here reads the clock or
+ * the database. Callers decide what a failure means for scoring (the "If it
+ * fails" column), using the reasons returned here.
  */
+import type { Policy } from "../policy/schema";
+import { addDays, ageInYears, diffDays, mondayOf } from "../rules/calendar";
 
 export type QualityResult = { ok: true } | { ok: false; reason: string };
 
-/**
- * CGPA: Between 0 and scale maximum.
- * If it fails: Excluded from scoring; data gap recorded (§4.3).
- */
+const OK: QualityResult = { ok: true };
+const fail = (reason: string): QualityResult => ({ ok: false, reason });
+
+// ── CGPA: between 0 and the scale maximum. Fails → excluded from scoring; data gap recorded.
+
 export function checkCgpa(cgpa: number | null | undefined, scaleMax: number): QualityResult {
-  if (cgpa == null || Number.isNaN(cgpa)) {
-    return { ok: false, reason: "CGPA missing" };
-  }
-  if (cgpa < 0 || cgpa > scaleMax) {
-    return { ok: false, reason: `CGPA ${cgpa} outside 0–${scaleMax}` };
-  }
-  return { ok: true };
+  if (cgpa == null || Number.isNaN(cgpa)) return fail("CGPA missing");
+  return cgpa >= 0 && cgpa <= scaleMax ? OK : fail(`CGPA ${cgpa} is outside 0–${scaleMax}`);
 }
 
-/**
- * Attendance week: Classes attended no greater than classes held; held greater than 0.
- * If it fails: Week excluded (§4.3).
- */
+// ── Attendance: attended ≤ held and held > 0. Fails → the week is excluded.
+//    More than two missing weeks lower confidence to MEDIUM, and further still to LOW.
+
 export function checkAttendanceWeek(held: number, attended: number): QualityResult {
-  if (held <= 0) {
-    return { ok: false, reason: "Classes held must be greater than 0" };
-  }
-  if (attended < 0) {
-    return { ok: false, reason: "Classes attended cannot be negative" };
-  }
-  if (attended > held) {
-    return { ok: false, reason: "Attended exceeds held" };
-  }
-  return { ok: true };
+  if (!Number.isInteger(held) || !Number.isInteger(attended)) return fail("Class counts must be whole numbers");
+  if (held <= 0) return fail("Classes held must be greater than 0");
+  if (attended < 0) return fail("Classes attended cannot be negative");
+  return attended <= held ? OK : fail("Classes attended exceed classes held");
 }
 
-/**
- * Attendance history evaluation (§4.3):
- * If more than two weeks are missing / invalid, confidence drops to MEDIUM or LOW.
- */
-export interface AttendanceSeriesResult {
-  validWeeks: { weekStart: string; held: number; attended: number }[];
-  invalidWeeks: { weekStart: string; held: number; attended: number; reason: string }[];
-  missingCount: number;
-  confidenceCeiling: "HIGH" | "MEDIUM" | "LOW";
+export interface WeekRecord {
+  weekStart: string;
+  held: number;
+  attended: number;
 }
 
-export function checkAttendanceSeries(
-  weeks: { weekStart: string; held: number; attended: number }[],
-  expectedTotalWeeks = 16,
-): AttendanceSeriesResult {
-  const validWeeks: AttendanceSeriesResult["validWeeks"] = [];
-  const invalidWeeks: AttendanceSeriesResult["invalidWeeks"] = [];
+export interface AttendanceQuality {
+  /** Valid records, one per week (a week's courses are summed), inside the current term. */
+  weeks: { weekStart: string; held: number; attended: number }[];
+  excluded: { weekStart: string; reason: string }[];
+  /** Weeks in the look-back window that have no valid record. */
+  missingWeeks: number;
+  /** Which confidence cap the missing weeks imply (§4.3). */
+  cap: "NONE" | "MEDIUM" | "LOW";
+}
 
-  for (const w of weeks) {
-    const res = checkAttendanceWeek(w.held, w.attended);
-    if (res.ok) {
-      validWeeks.push(w);
-    } else {
-      invalidWeeks.push({ ...w, reason: res.reason });
+export function assessAttendance(
+  records: readonly WeekRecord[],
+  asOf: string,
+  policy: Pick<Policy, "data_quality" | "calendar">,
+): AttendanceQuality {
+  const dq = policy.data_quality;
+  const termStart = mondayOf(policy.calendar.term.start);
+  const excluded: AttendanceQuality["excluded"] = [];
+  const byWeek = new Map<string, { held: number; attended: number }>();
+  for (const r of records) {
+    const wk = mondayOf(r.weekStart);
+    if (wk < termStart || wk > policy.calendar.term.end) continue;
+    const check = checkAttendanceWeek(r.held, r.attended);
+    if (!check.ok) {
+      excluded.push({ weekStart: wk, reason: check.reason });
+      continue;
     }
+    const cur = byWeek.get(wk) ?? { held: 0, attended: 0 };
+    cur.held += r.held;
+    cur.attended += r.attended;
+    byWeek.set(wk, cur);
   }
+  // A week with any invalid course row is not trustworthy as a whole: drop it.
+  for (const e of excluded) byWeek.delete(e.weekStart);
 
-  const missingCount = Math.max(0, expectedTotalWeeks - validWeeks.length);
-  let confidenceCeiling: "HIGH" | "MEDIUM" | "LOW" = "HIGH";
-  if (missingCount > 4) {
-    confidenceCeiling = "LOW";
-  } else if (missingCount > 2) {
-    confidenceCeiling = "MEDIUM";
-  }
+  const thisMonday = mondayOf(asOf);
+  const windowStart = addDays(thisMonday, -7 * (dq.attendance_window_weeks - 1));
+  let missing = 0;
+  for (let wk = windowStart < termStart ? termStart : windowStart; wk <= thisMonday; wk = addDays(wk, 7))
+    if (wk <= policy.calendar.term.end && !byWeek.has(wk)) missing++;
 
-  return { validWeeks, invalidWeeks, missingCount, confidenceCeiling };
-}
-
-/**
- * Mock attempt: Score within test range; seconds per item present and positive.
- * If it fails: Stored but flagged; excluded from percentile (§4.3).
- */
-export interface MockQualityResult {
-  ok: boolean;
-  reason?: string;
-  excludeFromPercentile: boolean;
-  flagForReview: boolean;
-}
-
-export function checkMockAttempt(
-  score: number | null | undefined,
-  scoreRange: [number, number],
-  avgSecondsPerItem: number | null | undefined,
-): MockQualityResult {
-  const [minScore, maxScore] = scoreRange;
-  if (score == null || Number.isNaN(score)) {
-    return {
-      ok: false,
-      reason: "Mock score missing",
-      excludeFromPercentile: true,
-      flagForReview: true,
-    };
-  }
-  if (score < minScore || score > maxScore) {
-    return {
-      ok: false,
-      reason: `Mock score ${score} outside valid range [${minScore}, ${maxScore}]`,
-      excludeFromPercentile: true,
-      flagForReview: true,
-    };
-  }
-  if (avgSecondsPerItem == null || Number.isNaN(avgSecondsPerItem) || avgSecondsPerItem <= 0) {
-    return {
-      ok: false,
-      reason: "Seconds per item must be present and greater than 0",
-      excludeFromPercentile: true,
-      flagForReview: true,
-    };
-  }
+  const cap =
+    missing > dq.attendance_missing_weeks_low_over
+      ? "LOW"
+      : missing > dq.attendance_missing_weeks_medium_over
+        ? "MEDIUM"
+        : "NONE";
   return {
-    ok: true,
-    excludeFromPercentile: false,
-    flagForReview: false,
+    weeks: [...byWeek.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([weekStart, v]) => ({ weekStart, ...v })),
+    excluded,
+    missingWeeks: missing,
+    cap,
   };
 }
 
-/**
- * Artifact URL: Valid scheme; reachable within 14 days of submission.
- * If it fails: Status UNVERIFIED with the reason recorded (§4.3).
- */
-export interface ArtifactUrlResult {
-  ok: boolean;
-  reason?: string;
-  statusIfFailed: "UNVERIFIED";
+/** Attendance for the term as a percentage, or null when no valid week exists. */
+export function termAttendancePct(weeks: readonly { held: number; attended: number }[]): number | null {
+  const held = weeks.reduce((n, w) => n + w.held, 0);
+  if (held === 0) return null;
+  return Math.round((weeks.reduce((n, w) => n + w.attended, 0) / held) * 10_000) / 100;
 }
 
-export function checkArtifactUrl(
-  url: string | null | undefined,
-  options?: {
-    submittedAt?: Date | string | null;
-    asOf?: Date;
-    maxDaysReachable?: number;
-  },
-): ArtifactUrlResult {
-  if (!url || typeof url !== "string" || !url.trim()) {
-    return {
-      ok: false,
-      reason: "URL is empty or missing",
-      statusIfFailed: "UNVERIFIED",
-    };
-  }
+// ── Mock attempt: score within the test range, seconds per item present.
+//    Fails → stored but flagged, and excluded from percentile scoring.
 
-  let parsed: URL;
+export function checkMockAttempt(m: {
+  score: number | null | undefined;
+  maxScore: number;
+  avgSecondsPerItem: number | null | undefined;
+}): QualityResult {
+  if (m.score == null || Number.isNaN(m.score)) return fail("Score missing");
+  if (m.score < 0 || m.score > m.maxScore) return fail(`Score ${m.score} is outside the test range 0–${m.maxScore}`);
+  if (m.avgSecondsPerItem == null || !(m.avgSecondsPerItem > 0)) return fail("Seconds per item missing");
+  return OK;
+}
+
+// ── Artifact URL: valid scheme; reachable within 14 days of submission.
+//    Fails → UNVERIFIED with the reason recorded.
+
+export function checkArtifactUrl(raw: string, policy: Pick<Policy, "data_quality">): QualityResult {
+  let url: URL;
   try {
-    parsed = new URL(url.trim());
+    url = new URL(raw);
   } catch {
-    return {
-      ok: false,
-      reason: "Malformed URL syntax",
-      statusIfFailed: "UNVERIFIED",
-    };
+    return fail("The link is not a valid URL");
   }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return {
-      ok: false,
-      reason: `Invalid protocol '${parsed.protocol}'; only http: and https: are allowed`,
-      statusIfFailed: "UNVERIFIED",
-    };
-  }
-
-  if (!parsed.hostname || !parsed.hostname.includes(".")) {
-    return {
-      ok: false,
-      reason: "URL must contain a valid domain name",
-      statusIfFailed: "UNVERIFIED",
-    };
-  }
-
-  // 14 days reachability window check from submission time
-  if (options?.submittedAt) {
-    const subDate = new Date(options.submittedAt);
-    const asOf = options.asOf ?? new Date();
-    const maxDays = options.maxDaysReachable ?? 14;
-    const diffDays = (asOf.getTime() - subDate.getTime()) / (1000 * 60 * 60 * 24);
-    if (diffDays > maxDays) {
-      return {
-        ok: false,
-        reason: `Artifact submission exceeded ${maxDays} days without verification confirmation`,
-        statusIfFailed: "UNVERIFIED",
-      };
-    }
-  }
-
-  return {
-    ok: true,
-    statusIfFailed: "UNVERIFIED",
-  };
+  const scheme = url.protocol.replace(":", "");
+  return policy.data_quality.artifact_url_schemes.includes(scheme)
+    ? OK
+    : fail(`The link scheme "${scheme}" is not accepted`);
 }
 
-/**
- * Student ID: Matches the ERP roll number format.
- * If it fails: Row rejected at import and logged for the registrar (§4.3).
- */
-export function checkRollNumber(
-  roll: string | null | undefined,
-  pattern = /^(?:[A-Z]{2,5}\d{4,8}|SYN\d{5})$/,
-): QualityResult {
-  if (!roll || typeof roll !== "string") {
-    return { ok: false, reason: "Roll number is missing" };
-  }
-  return pattern.test(roll.trim())
-    ? { ok: true }
-    : {
-        ok: false,
-        reason: `Roll number ${roll} does not match the ERP format`,
-      };
+/** True once the reachability window has run out without a successful check. */
+export function reachabilityWindowExpired(
+  submittedOn: string,
+  today: string,
+  policy: Pick<Policy, "data_quality">,
+): boolean {
+  return diffDays(submittedOn, today) > policy.data_quality.artifact_reachable_within_days;
 }
 
-/**
- * Date of birth: Present and consistent with year of study.
- * Any student under 18 is routed to the parental consent check (§4.3, §13.4).
- */
-export interface DobQualityResult {
-  ok: boolean;
-  reason?: string;
-  ageYears?: number;
-  isUnder18: boolean;
-  parentalConsentRequired: boolean;
+// ── Student ID: matches the ERP roll number format. Fails → row rejected at import, logged for the registrar.
+
+export function checkRollNumber(roll: string, pattern: string): QualityResult {
+  return new RegExp(pattern).test(roll) ? OK : fail(`Roll number ${roll} does not match the ERP format`);
 }
+
+// ── Date of birth: present and consistent with year of study. Under 18 → parental consent check.
+
+export type DobCheck = { ok: true; minor: boolean; age: number } | { ok: false; reason: string };
 
 export function checkDateOfBirth(
-  dob: string | Date | null | undefined,
+  dateOfBirth: string | null | undefined,
   yearOfStudy: number,
-  asOf = new Date(),
-): DobQualityResult {
-  if (!dob) {
-    return {
-      ok: false,
-      reason: "Date of birth is missing",
-      isUnder18: false,
-      parentalConsentRequired: false,
-    };
-  }
+  asOf: string,
+  policy: Pick<Policy, "data_quality">,
+): DobCheck {
+  if (!dateOfBirth) return { ok: false, reason: "Date of birth missing" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || Number.isNaN(Date.parse(dateOfBirth)))
+    return { ok: false, reason: "Date of birth is not a valid date" };
+  if (dateOfBirth > asOf) return { ok: false, reason: "Date of birth is in the future" };
+  const age = ageInYears(dateOfBirth, asOf);
+  const [lo, hi] = policy.data_quality.year1_age_range_years;
+  const offset = Math.max(0, yearOfStudy - 1);
+  if (age < lo + offset || age > hi + offset)
+    return { ok: false, reason: `Age ${age} is not consistent with year ${yearOfStudy} of study` };
+  return { ok: true, minor: age < policy.data_quality.minor_age_years, age };
+}
 
-  const birthDate = new Date(dob);
-  if (Number.isNaN(birthDate.getTime())) {
-    return {
-      ok: false,
-      reason: "Date of birth is invalid",
-      isUnder18: false,
-      parentalConsentRequired: false,
-    };
-  }
-
-  if (birthDate > asOf) {
-    return {
-      ok: false,
-      reason: "Date of birth cannot be in the future",
-      isUnder18: false,
-      parentalConsentRequired: false,
-    };
-  }
-
-  // Calculate age precisely
-  let age = asOf.getFullYear() - birthDate.getFullYear();
-  const m = asOf.getMonth() - birthDate.getMonth();
-  if (m < 0 || (m === 0 && asOf.getDate() < birthDate.getDate())) {
-    age--;
-  }
-
-  if (age < 15 || age > 70) {
-    return {
-      ok: false,
-      reason: `Age ${age} is outside plausible university student range (15–70)`,
-      ageYears: age,
-      isUnder18: age < 18,
-      parentalConsentRequired: age < 18,
-    };
-  }
-
-  // Consistency with year of study (assuming undergraduate 1-4)
-  const minExpectedAge = 15 + yearOfStudy; // e.g. Year 1 >= 16
-  const maxExpectedAge = 25 + yearOfStudy; // e.g. Year 1 <= 26
-  if (age < minExpectedAge || age > maxExpectedAge) {
-    return {
-      ok: false,
-      reason: `Age ${age} is inconsistent with year ${yearOfStudy} of study (expected ${minExpectedAge}–${maxExpectedAge})`,
-      ageYears: age,
-      isUnder18: age < 18,
-      parentalConsentRequired: age < 18,
-    };
-  }
-
-  const isUnder18 = age < 18;
-  return {
-    ok: true,
-    ageYears: age,
-    isUnder18,
-    parentalConsentRequired: isUnder18,
-  };
+/** Under the age of majority on `asOf`; false when the date of birth is missing or unusable. */
+export function isMinor(
+  dateOfBirth: string | null | undefined,
+  asOf: string,
+  policy: Pick<Policy, "data_quality">,
+): boolean {
+  if (!dateOfBirth || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth) || dateOfBirth > asOf) return false;
+  return ageInYears(dateOfBirth, asOf) < policy.data_quality.minor_age_years;
 }

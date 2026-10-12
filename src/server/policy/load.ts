@@ -1,59 +1,70 @@
 /**
- * Loads the active policy.
- * Primary source: policy_versions table with status 'ACTIVE' (§3.3).
- * Falls back to the versioned policy JSON file on disk when database is unseeded
- * or during pure offline testing.
+ * The policy in force (§3.1, §3.3): the ACTIVE row of `policy_versions` whose
+ * effective date has started, Zod-validated; when the table has no such row (a
+ * fresh install) or the database is unreachable, the file named by POLICY_FILE.
+ * Every evaluation records the version it used, so a change never rewrites history.
  */
-import { readFileSync } from "node:fs";
-import { basename, join } from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { policyVersions } from "../db/schema";
+import { logger } from "../logger";
+import { loadPolicyFile } from "./file";
+import { inForce } from "./lifecycle";
 import { type Policy, parsePolicy } from "./schema";
 
-let cachedActivePolicy: Policy | null = null;
-const fileCache = new Map<string, Policy>();
+export { loadPolicyFile } from "./file";
 
-export function clearPolicyCache(): void {
-  cachedActivePolicy = null;
-  fileCache.clear();
+export interface PolicyInfo {
+  policy: Policy;
+  /** Where the policy came from: the database row in force, or the bundled file. */
+  source: "database" | "file";
 }
 
-export function loadPolicyFile(file = process.env.POLICY_FILE ?? "policy/2026.10-v1.json"): Policy {
-  const path = join(process.cwd(), "policy", basename(file));
-  const hit = fileCache.get(path);
-  if (hit) return hit;
-  const policy = parsePolicy(JSON.parse(readFileSync(path, "utf8")));
-  fileCache.set(path, policy);
-  return policy;
+/** Short cache: a policy change reaches other processes (workers) within this window. */
+const TTL_MS = 30_000;
+const FAILURE_TTL_MS = 5_000;
+
+const g = globalThis as unknown as { policyCache?: { until: number; info: PolicyInfo } };
+
+export function invalidatePolicyCache() {
+  g.policyCache = undefined;
 }
 
-/**
- * Load active policy from the database. Caches in-memory;
- * falls back to policy file if database has no active version or is offline.
- */
-export async function loadActivePolicyFromDb(): Promise<Policy> {
+export const clearPolicyCache = invalidatePolicyCache;
+
+export async function getActivePolicyInfo(now = new Date()): Promise<PolicyInfo> {
+  const hit = g.policyCache;
+  if (hit && hit.until > Date.now()) return hit.info;
+
+  let info: PolicyInfo | null = null;
+  let ttl = TTL_MS;
   try {
-    const [row] = await db.select().from(policyVersions).where(eq(policyVersions.status, "ACTIVE")).limit(1);
-
-    if (row?.document) {
-      const parsed = parsePolicy(row.document);
-      cachedActivePolicy = parsed;
-      return parsed;
+    const rows = await db.select().from(policyVersions).where(eq(policyVersions.status, "ACTIVE"));
+    const row = inForce(rows, now);
+    if (row) {
+      try {
+        // The row's own columns win over whatever status the stored document carries.
+        const policy = parsePolicy({
+          ...(row.document as object),
+          policy_version: row.version,
+          status: row.status,
+          effective_from: row.effectiveFrom.toISOString().slice(0, 10),
+        });
+        info = { policy, source: "database" };
+      } catch (err) {
+        logger.error({ version: row.version, err: String(err) }, "active policy failed validation; using the file");
+        ttl = FAILURE_TTL_MS;
+      }
     }
-  } catch {
-    // Fall back to file if DB connection is unavailable
+  } catch (err) {
+    logger.warn({ err: String(err) }, "policy table unavailable; using the file");
+    ttl = FAILURE_TTL_MS;
   }
-  const fallback = loadPolicyFile();
-  cachedActivePolicy = fallback;
-  return fallback;
+  info ??= { policy: loadPolicyFile(), source: "file" };
+  g.policyCache = { until: Date.now() + ttl, info };
+  return info;
 }
 
-export function getActivePolicy(): Policy {
-  if (cachedActivePolicy) return cachedActivePolicy;
-  return loadPolicyFile();
-}
-
-export function setActivePolicy(policy: Policy): void {
-  cachedActivePolicy = policy;
+export async function getActivePolicy(): Promise<Policy> {
+  return (await getActivePolicyInfo()).policy;
 }

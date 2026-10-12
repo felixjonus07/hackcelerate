@@ -11,8 +11,17 @@ const globalForDb = globalThis as unknown as {
 };
 
 const url = process.env.DATABASE_URL ?? "postgres://aspiredge:aspiredge@localhost:5434/aspiredge";
+const isLocal = url.includes("localhost") || url.includes("127.0.0.1");
 
-export const pg = globalForDb.pg ?? postgres(url, { max: 10, prepare: false });
+export const pg =
+  globalForDb.pg ??
+  postgres(url, {
+    max: 10,
+    prepare: false,
+    connect_timeout: 15,
+    idle_timeout: 20,
+    ssl: isLocal ? undefined : "require",
+  });
 if (process.env.NODE_ENV !== "production") globalForDb.pg = pg;
 
 export const db = drizzle(pg, { schema, casing: "snake_case" });

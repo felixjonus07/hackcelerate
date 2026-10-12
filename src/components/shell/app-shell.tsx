@@ -13,6 +13,7 @@ import { AccountLink } from "./account-link";
 import { type NavItem, STUDENT_NAV, staffNav } from "./nav-config";
 import { NavLink } from "./nav-link";
 import { SessionGuard } from "./session-guard";
+import { ShellFooter } from "./shell-footer";
 import { SignOutButton } from "./sign-out-button";
 
 export function Brand() {
@@ -141,10 +142,13 @@ export function AppShell({ area, children }: { area: Area; children: ReactNode }
         className="mx-auto w-full min-w-0 max-w-[1320px] px-4 pb-28 pt-5 sm:px-6 lg:px-8 lg:pb-12 lg:pt-8"
       >
         {children}
+        <Suspense fallback={null}>
+          <ShellFooter />
+        </Suspense>
       </main>
       <nav
         aria-label="Main"
-        className="no-print fixed inset-x-0 bottom-0 z-40 flex gap-1 border-t border-line bg-card px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5 lg:hidden"
+        className="no-print fixed inset-x-0 bottom-0 z-40 flex gap-1 overflow-x-auto border-t border-line bg-card px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1.5 lg:hidden"
       >
         <Suspense fallback={null}>
           <BottomNav area={area} />

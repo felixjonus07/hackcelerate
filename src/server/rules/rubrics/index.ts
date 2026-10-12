@@ -2,19 +2,18 @@
  * Track rubrics (§5.3). Weights come from the policy file; this module only
  * defines *how* each component turns facts into a 0–100 score.
  *
- * Implements deterministic rubrics for all six tracks (§5.3):
- * 1. Corporate Placement (§5.3.1, §5.4)
- * 2. Higher Studies and Research (§5.3.2) - mixed-source lowest-multiplier rule
- * 3. Entrepreneurship and Startups (§5.3.3)
- * 4. Public Service and Government Exams (§5.3.4)
- * 5. Freelance and Creator Economy (§5.3.5)
- * 6. Sports, Defense and NCC (§5.3.6) - BMI band only, never numeric
+ * Corporate Placement and Public Service are fully specified in the reference
+ * plan. The other tracks are marked "assumed" in §5.1 and are implemented with
+ * the same component kinds; their required-item lists are a Phase 2 task.
  */
-import type { Policy, TrackId, VerificationStatus } from "../../policy/schema";
+import { type Policy, type TrackId, trackParams, type VerificationStatus } from "../../policy/schema";
+import { addDays } from "../calendar";
+import { streakValidDays } from "../integrity";
 import {
   attendanceScore,
   average,
   cgpaScore,
+  clamp,
   evidenceScore,
   multiplier,
   percentileScore,
@@ -22,13 +21,23 @@ import {
   speedScore,
   streakScore,
 } from "../normalize";
-import type { ComponentResult, FacultyRating, StudentFacts } from "../types";
+import type { ComponentResult, FacultyRating, MockAttempt, StudentFacts } from "../types";
 
 type ComponentCalc = (
   facts: StudentFacts,
   policy: Policy,
   ctx: { track: TrackId; key: string },
 ) => Omit<ComponentResult, "key" | "weight" | "contribution" | "label">;
+
+/** Rubrics that depend on dates read `facts.asOf`; they never read the clock (§10.1). */
+function asOfOf(facts: StudentFacts): string {
+  if (!facts.asOf) throw new Error("facts.asOf is required for this rubric (the rules engine never reads the clock)");
+  return facts.asOf;
+}
+
+const counted = (status: VerificationStatus, p: Policy) => multiplier(status, p) > 0;
+const lowestMultiplier = (statuses: VerificationStatus[], p: Policy) =>
+  statuses.length ? Math.min(...statuses.map((s) => multiplier(s, p))) : 0;
 
 const LABELS: Record<string, string> = {
   academic_baseline: "Academic baseline",
@@ -65,14 +74,15 @@ export const componentLabel = (key: string) => LABELS[key] ?? key;
 
 const fmt = (x: number) => (Math.round(x * 100) / 100).toString();
 
-// ── Shared Component Calculators ───────────────────────────────────────────
+// ── Component kinds ─────────────────────────────────────────────────────────
 
 /** Equal-weight average of the CGPA score and the attendance score. */
 const academic: ComponentCalc = (f, p) => {
   const gaps: string[] = [];
   const parts: number[] = [];
   const calc: string[] = [];
-  if (f.cgpa == null) gaps.push("CGPA missing from ERP import");
+  if (f.cgpa == null)
+    gaps.push(f.dataQuality?.cgpa ? `CGPA excluded: ${f.dataQuality.cgpa}` : "CGPA missing from ERP import");
   else {
     const s = cgpaScore(f.cgpa, p);
     parts.push(s);
@@ -92,7 +102,7 @@ const academic: ComponentCalc = (f, p) => {
   };
 };
 
-/** Campus aptitude percentile, falling back to the internal mock percentile (§5.3.1). */
+/** Campus aptitude percentile, falling back to the internal mock percentile. */
 const aptitude: ComponentCalc = (f) => {
   const value = f.campusAptitudePercentile ?? f.internalAptitudePercentile ?? null;
   if (value == null)
@@ -144,12 +154,11 @@ const departmentStandards: ComponentCalc = (f, p, { key }) => {
       refs.push(...matches.map((m) => m.id));
     }
   }
-  const gaps = required
-    .filter((r) => {
-      const s = found.get(r.key);
-      return !s || multiplier(s, p) === 0;
-    })
-    .map((r) => `${dept.items[r.key].label}: no counted evidence yet`);
+  const missing = required.filter((r) => {
+    const s = found.get(r.key);
+    return !s || multiplier(s, p) === 0;
+  });
+  const gaps = missing.map((r) => `${dept.items[r.key].label}: no counted evidence yet`);
   const total = required.reduce((s, r) => s + r.weight, 0);
   const terms = required
     .map((r) => {
@@ -161,28 +170,24 @@ const departmentStandards: ComponentCalc = (f, p, { key }) => {
     score: evidenceScore(required, found, p),
     evidenceRefs: refs,
     dataGaps: gaps,
+    missingItems: missing.map((r) => r.key),
     calculation: `(${terms}) / ${total} × 100`,
   };
 };
 
 function latestRatings(f: StudentFacts, kind: FacultyRating["kind"], n: number, p: Policy) {
   return f.ratings
-    .filter((r) => r.kind === kind && multiplier(r.status, p) > 0)
+    .filter((r) => r.kind === kind && counted(r.status, p))
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, n);
 }
 
+/** Average of the latest faculty ratings of one kind, on the five-point scale (§5.2 rating score). */
 const ratingsOf =
-  (kind: FacultyRating["kind"], window = 3, gapLabel = "No faculty ratings yet"): ComponentCalc =>
-  (f, p) => {
-    const rs = latestRatings(f, kind, window, p);
-    if (!rs.length)
-      return {
-        score: 0,
-        evidenceRefs: [],
-        dataGaps: [gapLabel],
-        calculation: "no ratings",
-      };
+  (kind: FacultyRating["kind"], window: (p: Policy, track: TrackId) => number, gapLabel: string): ComponentCalc =>
+  (f, p, { track }) => {
+    const rs = latestRatings(f, kind, window(p, track), p);
+    if (!rs.length) return { score: 0, evidenceRefs: [], dataGaps: [gapLabel], calculation: "no ratings" };
     const avg = average(rs.map((r) => r.rating));
     return {
       score: ratingScore(avg),
@@ -193,15 +198,10 @@ const ratingsOf =
   };
 
 /** Verified internship hours / full hours, capped at 1, × 100. */
-const internship: ComponentCalc = (f, p, { track }) => {
-  const full = Number(p.tracks[track]?.params.internship_hours_full ?? 120);
+const internship: ComponentCalc = (f, p) => {
+  const full = trackParams(p, "corporate_placement").internship_hours_full;
   if (f.verifiedInternshipHours == null)
-    return {
-      score: 0,
-      evidenceRefs: [],
-      dataGaps: ["No internship record"],
-      calculation: "no record",
-    };
+    return { score: 0, evidenceRefs: [], dataGaps: ["No internship record"], calculation: "no record" };
   return {
     score: Math.min(1, f.verifiedInternshipHours / full) * 100,
     evidenceRefs: ["placement:internship_hours"],
@@ -210,399 +210,360 @@ const internship: ComponentCalc = (f, p, { track }) => {
   };
 };
 
-/** Evidence score over the items the student has for this component. */
-const evidenceOf: ComponentCalc = (f, p, { key }) => {
+/** Required evidence weight for a component, from the track's `required_weights` (policy, never code). */
+function requiredWeight(p: Policy, track: TrackId, key: string): number {
+  const weights = (p.tracks[track]?.params as { required_weights?: Record<string, number> }).required_weights;
+  const w = weights?.[key];
+  if (w == null) throw new Error(`Policy ${p.policy_version} has no required_weights.${key} for ${track}`);
+  return w;
+}
+
+/**
+ * Evidence score (§5.2): Σ(weight × multiplier) / required weight × 100, capped at 100. Items with no
+ * counted status add nothing and are listed as gaps. A deployment's recorded uptime scales its share.
+ */
+const evidenceOf: ComponentCalc = (f, p, { track, key }) => {
   const items = f.evidence.filter((e) => e.component === key);
+  const required = requiredWeight(p, track, key);
   if (!items.length)
     return {
       score: 0,
       evidenceRefs: [],
       dataGaps: [`${componentLabel(key)}: no evidence yet`],
-      calculation: "no evidence",
+      calculation: `no evidence; ${required} weight needed`,
     };
-  const required = items.map((e) => ({ key: e.id, weight: e.weight ?? 1 }));
-  const found = new Map(items.map((e) => [e.id, e.status] as const));
+  const earned = items.reduce((sum, e) => {
+    const uptime = typeof e.details?.uptimePct === "number" ? clamp(e.details.uptimePct / 100, 0, 1) : 1;
+    return sum + (e.weight ?? 1) * multiplier(e.status, p) * uptime;
+  }, 0);
   return {
-    score: evidenceScore(required, found, p),
+    score: Math.min(100, (earned / required) * 100),
     evidenceRefs: items.map((e) => e.id),
-    dataGaps: items.filter((e) => multiplier(e.status, p) === 0).map((e) => `${e.label}: not counted (${e.status})`),
-    calculation: `Σ(weight × multiplier) / Σ weight over ${items.length} item(s)`,
+    dataGaps: items.filter((e) => !counted(e.status, p)).map((e) => `${e.label}: not counted (${e.status})`),
+    calculation: `Σ(weight × multiplier) = ${fmt(earned)} / ${required} required, capped at 100`,
   };
 };
 
+/** Counted attempts of one test type, newest first. */
+const attemptsOf = (f: StudentFacts, testType: string, n: number, p: Policy): MockAttempt[] =>
+  f.mocks
+    .filter((m) => m.testType === testType && counted(m.status, p))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, n);
+
+/** Average percentile of the latest attempts, scored at the lowest verification multiplier used (§5.3.2). */
 const mockPercentile =
-  (testType: string, window: number): ComponentCalc =>
+  (testType: (p: Policy) => string, window: (p: Policy) => number): ComponentCalc =>
   (f, p) => {
-    const ms = f.mocks
-      .filter((m) => m.testType === testType && multiplier(m.status, p) > 0)
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, window);
-    if (!ms.length)
-      return {
-        score: 0,
-        evidenceRefs: [],
-        dataGaps: [`No ${testType} mocks yet`],
-        calculation: "no mocks",
-      };
+    const type = testType(p);
+    const ms = attemptsOf(f, type, window(p), p);
+    if (!ms.length) return { score: 0, evidenceRefs: [], dataGaps: [`No ${type} mocks yet`], calculation: "no mocks" };
     const avg = average(ms.map((m) => m.percentile));
+    const lowest = lowestMultiplier(
+      ms.map((m) => m.status),
+      p,
+    );
     return {
-      score: percentileScore(avg),
+      score: percentileScore(avg) * lowest,
       evidenceRefs: ms.map((m) => m.id),
       dataGaps: [],
-      calculation: `average percentile of latest ${ms.length}: ${fmt(avg)}`,
+      calculation: `average percentile of latest ${ms.length}: ${fmt(avg)}${lowest < 1 ? ` × ${lowest} (lowest multiplier used)` : ""}`,
     };
   };
 
-const mockSpeed =
-  (testType: string): ComponentCalc =>
-  (f, p) => {
-    const ms = f.mocks.filter((m) => m.testType === testType && m.targetSecondsPerItem && multiplier(m.status, p) > 0);
-    if (!ms.length)
-      return {
-        score: 0,
-        evidenceRefs: [],
-        dataGaps: [`No timed ${testType} sets yet`],
-        calculation: "no timed sets",
-      };
-    const s = average(ms.map((m) => speedScore(m.targetSecondsPerItem ?? 0, m.avgSecondsPerItem)));
-    return {
-      score: s,
-      evidenceRefs: ms.map((m) => m.id),
-      dataGaps: [],
-      calculation: `average speed score over ${ms.length} set(s)`,
-    };
-  };
+/** Speed score of a set of timed attempts: mean per difficulty band, then mean of the bands (§5.3.4). */
+function speedByBand(ms: MockAttempt[]): { score: number; bands: number } | null {
+  const timed = ms.filter((m) => m.targetSecondsPerItem && m.avgSecondsPerItem > 0);
+  if (!timed.length) return null;
+  const bands = new Map<string, number[]>();
+  for (const m of timed)
+    bands.set(m.difficulty ?? "all", [
+      ...(bands.get(m.difficulty ?? "all") ?? []),
+      speedScore(m.targetSecondsPerItem ?? 0, m.avgSecondsPerItem),
+    ]);
+  return { score: average([...bands.values()].map(average)), bands: bands.size };
+}
 
-const streak: ComponentCalc = (f) =>
-  f.streakValidDays == null
-    ? {
-        score: 0,
-        evidenceRefs: [],
-        dataGaps: ["No streak data"],
-        calculation: "no data",
-      }
-    : {
-        score: streakScore(f.streakValidDays),
-        evidenceRefs: ["platform:streak"],
-        dataGaps: [],
-        calculation: `min(${f.streakValidDays}, 30) / 30 × 100`,
-      };
-
-// ── Track-Specific Calculators ─────────────────────────────────────────────
-
-/**
- * Higher Studies Entrance Exam Readiness (§5.3.2):
- * Average percentile on practice tests, with speed score as sub-measure.
- * Mixed-source rule: Scored at the lowest verification multiplier used.
- */
-const entranceExamReadiness: ComponentCalc = (f, p) => {
-  const ms = f.mocks.filter(
-    (m) =>
-      (m.testType === "entrance" || m.testType === "gre" || m.testType === "gate" || m.testType === "cat") &&
-      multiplier(m.status, p) > 0,
-  );
-  if (!ms.length) {
-    const pre = f.precomputed?.entrance_exam_readiness ?? f.precomputed?.entrance;
-    if (pre != null) {
-      return {
-        score: Math.max(0, Math.min(100, pre)),
-        evidenceRefs: ["record:entrance_exam_readiness"],
-        dataGaps: [],
-        calculation: `recorded entrance score: ${fmt(pre)}`,
-      };
-    }
+/** Entrance readiness (§5.3.2): average practice percentile for the target exam, speed as a sub-measure. */
+const entranceReadiness: ComponentCalc = (f, p) => {
+  const prm = trackParams(p, "higher_studies");
+  const ms = attemptsOf(f, prm.entrance_test_type, prm.entrance_window, p);
+  if (!ms.length)
     return {
       score: 0,
       evidenceRefs: [],
-      dataGaps: ["No entrance exam practice tests on record"],
-      calculation: "no entrance practice tests",
+      dataGaps: ["No practice tests for the target exam yet"],
+      calculation: "no practice tests",
     };
-  }
-
-  const mults = ms.map((m) => multiplier(m.status, p));
-  const lowestMult = Math.min(...mults);
-
-  const avgPercentile = average(ms.map((m) => m.percentile));
-  const timed = ms.filter((m) => m.targetSecondsPerItem && m.avgSecondsPerItem > 0);
-
-  let rawScore = avgPercentile;
-  let calcText = `average percentile ${fmt(avgPercentile)}`;
-  if (timed.length) {
-    const avgSpeed = average(timed.map((m) => speedScore(m.targetSecondsPerItem ?? 0, m.avgSecondsPerItem)));
-    rawScore = avgPercentile * 0.7 + avgSpeed * 0.3;
-    calcText = `(0.7 × ${fmt(avgPercentile)} percentile + 0.3 × ${fmt(avgSpeed)} speed)`;
-  }
-
-  const finalScore = Math.max(0, Math.min(100, rawScore * lowestMult));
+  const percentile = percentileScore(average(ms.map((m) => m.percentile)));
+  const speed = speedByBand(ms);
+  const share = speed ? prm.entrance_speed_share : 0;
+  const lowest = lowestMultiplier(
+    ms.map((m) => m.status),
+    p,
+  );
+  const sources = [...new Set(ms.map((m) => m.source ?? "unlabelled"))];
   return {
-    score: finalScore,
+    score: ((1 - share) * percentile + share * (speed?.score ?? 0)) * lowest,
     evidenceRefs: ms.map((m) => m.id),
     dataGaps: [],
-    calculation:
-      lowestMult < 1.0
-        ? `${calcText} × ${lowestMult.toFixed(2)} lowest multiplier (mixed/discounted sources) → ${fmt(finalScore)}`
-        : `${calcText} → ${fmt(finalScore)}`,
+    subMeasures: speed ? [{ label: "Speed score", value: fmt(speed.score) }] : [],
+    calculation: `average percentile of latest ${ms.length}: ${fmt(percentile)}${share ? `, speed share ${share}` : ""}${lowest < 1 ? `; × ${lowest}, the lowest multiplier among sources (${sources.join(", ")})` : ""}`,
+  };
+};
+
+/** Faculty-reviewed statement-of-purpose drafts, capped, divided by the full count (§5.3.2). */
+const sopReviews: ComponentCalc = (f, p, { key }) => {
+  const full = trackParams(p, "higher_studies").sop_reviews_full;
+  const reviews = f.evidence.filter((e) => e.component === key && (e.status === "ATTESTED" || e.status === "VERIFIED"));
+  if (!reviews.length)
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No faculty-reviewed statement-of-purpose draft yet"],
+      calculation: "no reviews",
+    };
+  return {
+    score: (Math.min(reviews.length, full) / full) * 100,
+    evidenceRefs: reviews.map((e) => e.id),
+    dataGaps: [],
+    calculation: `min(${reviews.length}, ${full}) / ${full} × 100`,
+  };
+};
+
+/** Share of self-set milestones completed on or before their date (§5.3.2, §5.3.3). */
+const milestoneAdherence =
+  (scope: "application" | "venture"): ComponentCalc =>
+  (f) => {
+    const asOf = asOfOf(f);
+    const all = (f.milestones ?? []).filter((m) => m.scope === scope);
+    // A milestone counts once it is due or done; one that is not yet due is neither late nor on time.
+    const relevant = all.filter((m) => m.dueOn <= asOf || m.completedOn != null);
+    if (!relevant.length)
+      return { score: 0, evidenceRefs: [], dataGaps: ["No milestones set or due yet"], calculation: "no milestones" };
+    const onTime = relevant.filter((m) => m.completedOn != null && m.completedOn <= m.dueOn);
+    return {
+      score: (onTime.length / relevant.length) * 100,
+      evidenceRefs: relevant.map((m) => m.id),
+      dataGaps: [],
+      calculation: `${onTime.length} of ${relevant.length} milestones on time`,
+    };
+  };
+
+/** Logged customer interviews (capped, ÷ full) times the mentor's quality rating (§5.3.3). */
+const customerValidation: ComponentCalc = (f, p, { key }) => {
+  const prm = trackParams(p, "entrepreneurship");
+  const logs = f.evidence.filter(
+    (e) => e.component === key && e.kind === "interview_log" && (e.status === "ATTESTED" || e.status === "VERIFIED"),
+  );
+  const ratings = latestRatings(f, "customer_validation", prm.customer_rating_window, p);
+  const gaps: string[] = [];
+  if (!logs.length) gaps.push("No reviewed customer interview log yet");
+  if (!ratings.length) gaps.push("Mentor quality rating pending");
+  if (gaps.length) return { score: 0, evidenceRefs: [], dataGaps: gaps, calculation: "interviews or rating missing" };
+  const quality = ratingScore(average(ratings.map((r) => r.rating))) / 100;
+  return {
+    score: (Math.min(logs.length, prm.customer_interviews_full) / prm.customer_interviews_full) * quality * 100,
+    evidenceRefs: [...logs.map((e) => e.id), ...ratings.map((r) => r.id)],
+    dataGaps: [],
+    calculation: `min(${logs.length}, ${prm.customer_interviews_full}) / ${prm.customer_interviews_full} × quality ${fmt(quality)}`,
+  };
+};
+
+/** Days with a current-affairs session × accuracy on weekly tests, over the window (§5.3.4). */
+const currentAffairs: ComponentCalc = (f, p) => {
+  const prm = trackParams(p, "public_service");
+  const asOf = asOfOf(f);
+  const from = addDays(asOf, -(prm.current_affairs_window_days - 1));
+  const days = new Set((f.currentAffairsDates ?? []).filter((d) => d >= from && d <= asOf));
+  const tests = f.mocks.filter(
+    (m) =>
+      m.testType === prm.weekly_test_type &&
+      counted(m.status, p) &&
+      m.score != null &&
+      m.maxScore &&
+      m.date >= from &&
+      m.date <= asOf,
+  );
+  if (!tests.length)
+    return {
+      score: 0,
+      evidenceRefs: [],
+      dataGaps: ["No weekly test results in the last 30 days"],
+      calculation: `${days.size} session days; accuracy unknown`,
+    };
+  const accuracy = average(tests.map((m) => clamp((m.score ?? 0) / (m.maxScore ?? 1), 0, 1)));
+  return {
+    score: (days.size / prm.current_affairs_window_days) * accuracy * 100,
+    evidenceRefs: tests.map((m) => m.id),
+    dataGaps: [],
+    calculation: `${days.size} / ${prm.current_affairs_window_days} days × accuracy ${fmt(accuracy)}`,
+  };
+};
+
+const quantSpeed: ComponentCalc = (f, p) => {
+  const type = trackParams(p, "public_service").quant_test_type;
+  const ms = f.mocks.filter((m) => m.testType === type && counted(m.status, p));
+  const r = speedByBand(ms);
+  if (!r) return { score: 0, evidenceRefs: [], dataGaps: [`No timed ${type} sets yet`], calculation: "no timed sets" };
+  const lowest = lowestMultiplier(
+    ms.map((m) => m.status),
+    p,
+  );
+  return {
+    score: r.score * lowest,
+    evidenceRefs: ms.map((m) => m.id),
+    dataGaps: [],
+    calculation: `mean of ${r.bands} difficulty band(s) of speed scores`,
+  };
+};
+
+/** Streak score over the policy window; one credit per day with a complete mock (§5.2, §6.3). */
+const mockStreak: ComponentCalc = (f, p) => {
+  const days = streakValidDays(f.mocks, asOfOf(f), p);
+  if (f.mocks.length === 0)
+    return { score: 0, evidenceRefs: [], dataGaps: ["No mock attempts yet"], calculation: "no mocks" };
+  return {
+    score: streakScore(days, p.streak.target_days),
+    evidenceRefs: ["platform:streak"],
+    dataGaps: [],
+    calculation: `min(${days}, ${p.streak.target_days}) / ${p.streak.target_days} × 100`,
   };
 };
 
 /**
- * Statement-of-purpose drafts reviewed by faculty (§5.3.2):
- * Capped at 3, divided by 3, times 100.
+ * Physical fitness (§5.3.6): the mean of the Cooper band score, the stamina score and the BMI band
+ * score, from a record the sports or NCC officer signed. BMI is held only as a band, never as a number.
  */
-const sopDraftReadiness: ComponentCalc = (f, p, { track }) => {
-  const full = Number(p.tracks[track]?.params.sop_reviews_full ?? 3);
-  const sopRatings = f.ratings.filter((r) => r.kind === "sop_review" && multiplier(r.status, p) > 0);
-  const count =
-    f.sopReviewsCount ??
-    (sopRatings.length > 0
-      ? sopRatings.length
-      : f.precomputed?.sop_reviews != null
-        ? f.precomputed.sop_reviews
-        : f.precomputed?.faculty_recommendation_readiness != null
-          ? (f.precomputed.faculty_recommendation_readiness / 100) * full
-          : 0);
-
-  if (!count) {
+const physicalFitness: ComponentCalc = (f, p, { key }) => {
+  const prm = trackParams(p, "sports_defense_ncc");
+  const records = f.evidence.filter((e) => e.component === key && e.kind === "fitness_record" && counted(e.status, p));
+  if (!records.length)
     return {
       score: 0,
       evidenceRefs: [],
-      dataGaps: ["No statement-of-purpose drafts reviewed by faculty yet"],
-      calculation: `0 SOP drafts reviewed / ${full}`,
+      dataGaps: ["No fitness record signed by the sports or NCC officer yet"],
+      calculation: "no signed record",
     };
-  }
-
-  const score = Math.min(1, count / full) * 100;
-  return {
-    score,
-    evidenceRefs: sopRatings.map((r) => r.id),
-    dataGaps: [],
-    calculation: `min(${count}, ${full}) / ${full} × 100 → ${fmt(score)}`,
-  };
-};
-
-/**
- * Application timeline adherence (§5.3.2):
- * Share of self-set milestones completed on or before their dates.
- */
-const applicationMilestonesAdherence: ComponentCalc = (f) => {
-  const pct =
-    f.applicationMilestonesCompletedPct ??
-    f.precomputed?.application_timeline_adherence ??
-    f.precomputed?.milestones_completed_pct;
-  if (pct == null) {
+  const scored = records.map((rec) => {
+    const parts: number[] = [];
+    const notes: string[] = [];
+    const d = rec.details ?? {};
+    if (typeof d.cooperMetres === "number") {
+      const metres = d.cooperMetres;
+      const band = [...prm.cooper_bands]
+        .sort((a, b) => b.min_metres - a.min_metres)
+        .find((b) => metres >= b.min_metres);
+      parts.push(band?.score ?? 0);
+      notes.push("Cooper distance band");
+    }
+    if (typeof d.staminaScore === "number") {
+      parts.push(clamp(d.staminaScore, 0, 100));
+      notes.push("stamina score");
+    }
+    if (d.bmiBand === "in_range" || d.bmiBand === "borderline" || d.bmiBand === "out_of_range") {
+      parts.push(prm.bmi_band_scores[d.bmiBand]);
+      notes.push(`BMI band: ${String(d.bmiBand).replace("_", " ")}`);
+    }
+    return { rec, notes, score: parts.length ? average(parts) * multiplier(rec.status, p) : 0 };
+  });
+  // The strongest signed record counts, so adding a record can never lower the component.
+  const best = scored.reduce((a, b) => (b.score > a.score ? b : a));
+  if (best.notes.length === 0)
     return {
       score: 0,
-      evidenceRefs: [],
-      dataGaps: ["No application milestones recorded yet"],
-      calculation: "no milestone records",
+      evidenceRefs: [best.rec.id],
+      dataGaps: ["The fitness record has no measures"],
+      calculation: "empty record",
     };
-  }
-  const score = Math.max(0, Math.min(100, pct));
   return {
-    score,
-    evidenceRefs: ["record:application_milestones"],
+    score: best.score,
+    evidenceRefs: [best.rec.id],
     dataGaps: [],
-    calculation: `application milestones completed on time: ${fmt(score)}%`,
+    calculation: `mean of ${best.notes.join(", ")}`,
   };
 };
 
-/**
- * Entrepreneurship customer validation (§5.3.3):
- * Logged customer interviews (capped at 15) / 15 × mentor quality rating.
- */
-const customerValidation: ComponentCalc = (f, p, { track }) => {
-  const full = Number(p.tracks[track]?.params.customer_interviews_full ?? 15);
-  const interviews = f.customerInterviewsCount ?? f.precomputed?.customer_interviews;
-  const ratingRec = f.ratings.find((r) => r.kind === "customer_validation" && multiplier(r.status, p) > 0);
-  const rating = ratingRec ? ratingRec.rating : (f.precomputed?.customer_validation_rating ?? 4.0);
-
-  if (interviews == null || interviews === 0) {
-    return {
-      score: 0,
-      evidenceRefs: [],
-      dataGaps: ["No customer validation interviews logged yet"],
-      calculation: "0 customer interviews logged",
-    };
-  }
-
-  const ratio = Math.min(interviews, full) / full;
-  const ratingMult = Math.min(5, Math.max(1, rating)) / 5;
-  const score = ratio * ratingMult * 100;
-
+/** Camp days attended / days required, capped at 1 (§5.3.6). */
+const campAttendance: ComponentCalc = (f, p, { key }) => {
+  const recs = f.evidence.filter((e) => e.component === key && e.kind === "camp_record" && counted(e.status, p));
+  const attended = recs.reduce((n, e) => n + (Number(e.details?.daysAttended) || 0), 0);
+  const required = recs.reduce((n, e) => n + (Number(e.details?.daysRequired) || 0), 0);
+  if (!recs.length || required <= 0)
+    return { score: 0, evidenceRefs: [], dataGaps: ["No camp attendance record yet"], calculation: "no records" };
   return {
-    score,
-    evidenceRefs: ratingRec ? [ratingRec.id] : ["record:customer_interviews"],
+    score:
+      Math.min(1, attended / required) *
+      lowestMultiplier(
+        recs.map((e) => e.status),
+        p,
+      ) *
+      100,
+    evidenceRefs: recs.map((e) => e.id),
     dataGaps: [],
-    calculation: `(min(${interviews}, ${full}) / ${full}) × (${fmt(rating)} / 5) × 100 → ${fmt(score)}`,
+    calculation: `${attended} of ${required} camp days, capped at 1`,
   };
 };
 
-/**
- * Entrepreneurship team & execution (§5.3.3):
- * Share of venture milestones completed on time.
- */
-const ventureMilestones: ComponentCalc = (f) => {
-  const pct =
-    f.ventureMilestonesOnTimePct ?? f.precomputed?.team_and_execution ?? f.precomputed?.milestones_on_time_pct;
-  if (pct == null) {
-    return {
-      score: 0,
-      evidenceRefs: [],
-      dataGaps: ["No venture milestones recorded yet"],
-      calculation: "no milestone records",
-    };
-  }
-  const score = Math.max(0, Math.min(100, pct));
+/** Points by level, over the required points, capped at 100 (§5.3.6). */
+const competitionResults: ComponentCalc = (f, p, { key }) => {
+  const prm = trackParams(p, "sports_defense_ncc");
+  const medals = f.evidence.filter((e) => e.component === key && e.kind === "medal");
+  const earned = medals.reduce((sum, e) => {
+    const level = String(e.details?.level) as keyof typeof prm.competition_points;
+    return sum + (prm.competition_points[level] ?? 0) * multiplier(e.status, p);
+  }, 0);
+  if (!medals.length)
+    return { score: 0, evidenceRefs: [], dataGaps: ["No competition result attested yet"], calculation: "no results" };
   return {
-    score,
-    evidenceRefs: ["record:venture_milestones"],
-    dataGaps: [],
-    calculation: `venture milestones completed on time: ${fmt(score)}%`,
+    score: Math.min(100, (earned / prm.competition_required_points) * 100),
+    evidenceRefs: medals.map((e) => e.id),
+    dataGaps: medals.filter((e) => !counted(e.status, p)).map((e) => `${e.label}: not counted (${e.status})`),
+    calculation: `${fmt(earned)} points / ${prm.competition_required_points} required, capped at 100`,
   };
 };
 
-/**
- * Public Service current affairs consistency (§5.3.4):
- * Days with a logged session in the last 30 / 30 × accuracy on weekly tests.
- */
-const currentAffairsConsistency: ComponentCalc = (f) => {
-  const days =
-    f.currentAffairsDaysLogged ??
-    (f.streakValidDays != null ? Math.min(f.streakValidDays, 30) : (f.precomputed?.current_affairs_days ?? null));
-  const accuracy =
-    f.currentAffairsWeeklyAccuracy ??
-    (f.precomputed?.current_affairs_accuracy != null ? f.precomputed.current_affairs_accuracy / 100 : null);
-
-  if (days == null || days === 0) {
-    return {
-      score: 0,
-      evidenceRefs: [],
-      dataGaps: ["No logged current affairs sessions in the last 30 days"],
-      calculation: "0 days logged",
-    };
-  }
-
-  const effectiveAcc = accuracy != null ? Math.max(0, Math.min(1, accuracy)) : 0.75;
-  const score = (Math.min(days, 30) / 30) * effectiveAcc * 100;
-
-  return {
-    score,
-    evidenceRefs: ["platform:current_affairs"],
-    dataGaps: [],
-    calculation: `(min(${days}, 30) / 30) × ${(effectiveAcc * 100).toFixed(0)}% accuracy × 100 → ${fmt(score)}`,
-  };
-};
-
-/**
- * Sports, Defense & NCC physical fitness (§5.3.6):
- * Cooper test distance band, stamina score, and BMI shown ONLY as a band.
- * HARD DOMAIN RULE (§5.3.6): BMI is NEVER output as a number to protect students from body-image harm.
- */
-const physicalFitness: ComponentCalc = (f) => {
-  const cooperScore =
-    f.physicalFitnessCooperBandScore ?? f.precomputed?.cooper_score ?? f.precomputed?.physical_fitness ?? null;
-  const bmiBand = f.physicalFitnessBmiBand ?? "NORMAL";
-  const bmiFactor = bmiBand === "NORMAL" ? 1.0 : bmiBand === "WATCH" ? 0.85 : 0.7;
-
-  if (cooperScore == null) {
-    return {
-      score: 0,
-      evidenceRefs: [],
-      dataGaps: ["No physical fitness or Cooper test records on file"],
-      calculation: "no fitness test on record",
-    };
-  }
-
-  const score = Math.max(0, Math.min(100, cooperScore * bmiFactor));
-  return {
-    score,
-    evidenceRefs: ["record:physical_fitness"],
-    dataGaps: [],
-    calculation: `Cooper test score ${fmt(cooperScore)} × BMI band factor (${bmiBand}) → ${fmt(score)}`,
-  };
-};
-
-/**
- * Sports, Defense & NCC camp & training attendance (§5.3.6):
- * Days attended / days required, capped at 1, times 100.
- */
-const campTrainingAttendance: ComponentCalc = (f) => {
-  const attended = f.campDaysAttended ?? f.precomputed?.camp_days_attended ?? f.precomputed?.camp_training_attendance;
-  const required = f.campDaysRequired ?? f.precomputed?.camp_days_required ?? 14;
-
-  if (attended == null || attended === 0) {
-    return {
-      score: 0,
-      evidenceRefs: [],
-      dataGaps: ["No camp or training attendance recorded yet"],
-      calculation: `0 days attended / ${required}`,
-    };
-  }
-
-  const score = Math.min(1, attended / required) * 100;
-  return {
-    score,
-    evidenceRefs: ["record:camp_attendance"],
-    dataGaps: [],
-    calculation: `min(1, ${attended} / ${required}) × 100 → ${fmt(score)}`,
-  };
-};
-
-/**
- * Sports, Defense & NCC competition results (§5.3.6):
- * Points by level (university 1, state 2, national 3), capped at 100.
- */
-const competitionResults: ComponentCalc = (f) => {
-  const points = f.competitionPoints ?? f.precomputed?.competition_results ?? f.precomputed?.competition_points ?? null;
-
-  if (points == null || points === 0) {
-    return {
-      score: 0,
-      evidenceRefs: [],
-      dataGaps: ["No sports/defense competition results on record"],
-      calculation: "0 competition points",
-    };
-  }
-
-  const score = Math.min(100, points * 25);
-  return {
-    score,
-    evidenceRefs: ["record:competition_results"],
-    dataGaps: [],
-    calculation: `competition score from level points: ${fmt(score)}`,
-  };
-};
-
-// ── Track Specifications (§5.3) ───────────────────────────────────────────
+// ── Track specs ─────────────────────────────────────────────────────────────
 
 export const RUBRICS: Record<TrackId, Record<string, ComponentCalc>> = {
   corporate_placement: {
     academic_baseline: academic,
     aptitude,
     domain_practical_evidence: departmentStandards,
-    mock_interview_readiness: ratingsOf("mock_interview", 3, "No faculty mock interviews yet"),
+    mock_interview_readiness: ratingsOf(
+      "mock_interview",
+      (p) => trackParams(p, "corporate_placement").mock_interview_window,
+      "No faculty mock interviews yet",
+    ),
     verified_experience: internship,
   },
   higher_studies: {
     academic_baseline: academic,
-    entrance_exam_readiness: entranceExamReadiness,
+    entrance_exam_readiness: entranceReadiness,
     research_output: evidenceOf,
-    faculty_recommendation_readiness: sopDraftReadiness,
-    application_timeline_adherence: applicationMilestonesAdherence,
+    faculty_recommendation_readiness: sopReviews,
+    application_timeline_adherence: milestoneAdherence("application"),
   },
   entrepreneurship: {
     venture_traction: evidenceOf,
     build_evidence: evidenceOf,
     customer_validation: customerValidation,
-    team_and_execution: ventureMilestones,
+    team_and_execution: milestoneAdherence("venture"),
     academic_continuity: academic,
   },
   public_service: {
-    current_affairs_consistency: currentAffairsConsistency,
-    general_studies_mock: mockPercentile("gs_full", 3),
-    quantitative_speed: mockSpeed("quant"),
-    mock_streak: streak,
-    answer_writing: ratingsOf("answer_writing", 3, "No answer-writing ratings yet"),
+    current_affairs_consistency: currentAffairs,
+    general_studies_mock: mockPercentile(
+      (p) => trackParams(p, "public_service").gs_test_type,
+      (p) => trackParams(p, "public_service").gs_mock_window,
+    ),
+    quantitative_speed: quantSpeed,
+    mock_streak: mockStreak,
+    answer_writing: ratingsOf(
+      "answer_writing",
+      (p) => trackParams(p, "public_service").answer_writing_window,
+      "No answer-writing ratings yet",
+    ),
   },
   freelance_creator: {
     live_portfolio: evidenceOf,
@@ -613,13 +574,17 @@ export const RUBRICS: Record<TrackId, Record<string, ComponentCalc>> = {
   },
   sports_defense_ncc: {
     physical_fitness: physicalFitness,
-    camp_training_attendance: campTrainingAttendance,
+    camp_training_attendance: campAttendance,
     competition_results: competitionResults,
-    psychometric_readiness: ratingsOf("psychometric", 3, "No psychometric ratings yet"),
+    psychometric_readiness: ratingsOf(
+      "psychometric",
+      (p) => trackParams(p, "sports_defense_ncc").psychometric_window,
+      "No psychometric ratings yet",
+    ),
   },
 };
 
-/** Gates (§5.3): conditions that must hold before a track score is shown. */
+/** Gates (§5.3): conditions that must hold before a track score is shown. Gates add no points. */
 export function checkGate(track: TrackId, facts: StudentFacts, policy: Policy): string | null {
   const gate = policy.tracks[track]?.gate;
   switch (gate) {
@@ -627,27 +592,39 @@ export function checkGate(track: TrackId, facts: StudentFacts, policy: Policy): 
     case undefined:
       return null;
     case "at_least_one_department_standard_item": {
-      const counted = facts.evidence.some((e) => e.standardItem && multiplier(e.status, policy) > 0);
-      return counted ? null : "Not enough evidence yet";
+      const counted_ = facts.evidence.some((e) => e.standardItem && multiplier(e.status, policy) > 0);
+      return counted_ ? null : "Not enough evidence yet";
     }
     case "cgpa_above_eligibility_floor":
       return facts.cgpa != null && facts.cgpa > policy.academic.eligibility_cgpa_above
         ? null
-        : "CGPA is not above the eligibility floor";
+        : "Not enough evidence yet";
     case "attendance_at_or_above_requirement":
       return facts.attendancePct != null && facts.attendancePct >= policy.attendance.requirement_pct
         ? null
-        : "Attendance is below the requirement";
-    case "minimum_credits_held": {
-      const minRequired = facts.minimumCreditsRequired ?? 20;
-      if (facts.creditsHeld != null) {
-        return facts.creditsHeld >= minRequired ? null : "Minimum credits not held";
-      }
-      if (facts.precomputed?.minimum_credits_held != null) {
-        return facts.precomputed.minimum_credits_held > 0 ? null : "Minimum credits not held";
-      }
-      return null;
-    }
+        : "Not enough evidence yet";
+    case "minimum_credits_held":
+      return facts.creditsHeld != null && facts.creditsHeld >= trackParams(policy, "sports_defense_ncc").min_credits
+        ? null
+        : "Not enough evidence yet";
+    default:
+      return `Unknown gate ${gate}`;
+  }
+}
+
+/** Why a gate is not met, in staff terms; the student sees only "Not enough evidence yet" (§5.3). */
+export function gateReason(track: TrackId, facts: StudentFacts, policy: Policy): string | null {
+  if (checkGate(track, facts, policy) === null) return null;
+  const gate = policy.tracks[track]?.gate;
+  switch (gate) {
+    case "at_least_one_department_standard_item":
+      return "No department standard item has counted evidence";
+    case "cgpa_above_eligibility_floor":
+      return `CGPA is not above the eligibility floor of ${policy.academic.eligibility_cgpa_above}`;
+    case "attendance_at_or_above_requirement":
+      return `Attendance is below the requirement of ${policy.attendance.requirement_pct}%`;
+    case "minimum_credits_held":
+      return "Minimum credits for sports quota eligibility are not on record";
     default:
       return `Unknown gate ${gate}`;
   }

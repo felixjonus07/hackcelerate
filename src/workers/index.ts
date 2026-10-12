@@ -3,19 +3,22 @@
  *   npm run worker
  * Consumers for every queue in src/server/queue, plus the nightly refresh.
  */
-import { existsSync, readFileSync } from "node:fs";
+
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { type Job, Worker } from "bullmq";
-import { sql } from "drizzle-orm";
 import { createRedis } from "../server/cache/redis";
 import { db } from "../server/db";
 import { students } from "../server/db/schema";
-import { embedRemediationRow } from "../server/embeddings";
-import { ingestErpCsv } from "../server/ingestion/erp";
+import { embedOpportunityRow, embedRemediationRow } from "../server/embeddings";
+import { env } from "../server/env";
 import { logger } from "../server/logger";
 import { enqueue, getQueue, type JobPayloads, QUEUES } from "../server/queue";
+import { importErp } from "../server/services/erp-import";
 import { runEvaluation } from "../server/services/evaluations";
+import { runMaintenance } from "../server/services/maintenance";
+import { ParentalConsentRequired } from "../server/services/parental";
 import { verifyArtifact } from "../server/verification";
-import { runRecheckScheduler } from "../server/verification/recheck";
 
 const connection = createRedis();
 const concurrency = 8; // §10.3: nightly batch at concurrency 8
@@ -24,61 +27,67 @@ const workers = [
   new Worker<JobPayloads["evaluation"]>(
     QUEUES.evaluation,
     async (job: Job) => {
-      const ev = await runEvaluation(job.data.studentId, {
-        actorUserId: job.data.requestedBy,
-      });
-      return { evaluationId: ev.id, aegIndex: ev.aegIndex };
+      try {
+        const ev = await runEvaluation(job.data.studentId, { actorUserId: job.data.requestedBy });
+        return { evaluationId: ev.id, aegIndex: ev.aegIndex };
+      } catch (e) {
+        // A student under 18 without verified parental consent is skipped, not retried (§13.4).
+        if (e instanceof ParentalConsentRequired) return { skipped: "awaiting parental consent" };
+        throw e;
+      }
     },
     { connection, concurrency },
   ),
 
   new Worker<JobPayloads["verification"]>(
     QUEUES.verification,
-    async (job: Job) => verifyArtifact(job.data.artifactId, job.data.kind, job.data.attempt),
+    async (job: Job) => verifyArtifact(job.data.artifactId, job.data.kind),
     { connection, concurrency: 4 },
   ),
 
   new Worker<JobPayloads["ingestion"]>(
     QUEUES.ingestion,
-    async (job: Job) => {
-      let content = job.data.csvContent;
-      if (!content && job.data.filePath && existsSync(job.data.filePath)) {
-        content = readFileSync(job.data.filePath, "utf8");
-      }
-      if (content) {
-        await ingestErpCsv(content, { source: job.data.source });
-      }
-      const rows = await db.select({ id: students.id }).from(students).where(sql`true`);
-      for (const r of rows)
-        await enqueue("evaluation", {
-          studentId: r.id,
-          requestedBy: "system",
-          reason: "nightly",
+    async (job: Job<JobPayloads["ingestion"]>) => {
+      // §10.2: ingestion first (checksum, rejects, stale marking), then the cohort is re-evaluated.
+      const file = job.data.filePath ?? env.ERP_EXPORT_FILE;
+      let imported: Awaited<ReturnType<typeof importErp>> | null = null;
+      if (file) {
+        const text = await readFile(file, "utf8").catch((e: NodeJS.ErrnoException) => {
+          if (e.code === "ENOENT") return null;
+          throw e;
         });
-      return { queued: rows.length, source: job.data.source };
+        imported = await importErp({ fileName: basename(file), text, source: job.data.source });
+        logger.info({ status: imported.status, rejected: imported.rowsRejected }, "ERP import finished");
+      }
+      // Cohort statistics and integrity scan first, so the evaluations below use fresh signals.
+      await runMaintenance("refresh_signals");
+      // A manual import re-scores only who changed; the nightly run re-scores everyone (narratives are cached).
+      const ids =
+        job.data.source === "manual" && imported
+          ? imported.changedStudentIds
+          : (await db.select({ id: students.id }).from(students)).map((r) => r.id);
+      for (const id of ids)
+        await enqueue("evaluation", {
+          studentId: id,
+          requestedBy: "system",
+          reason: job.data.source === "manual" ? "erp_import" : "nightly",
+        });
+      return { queued: ids.length, source: job.data.source, import: imported?.status ?? "not configured" };
     },
     { connection },
   ),
 
   new Worker<JobPayloads["maintenance"]>(
     QUEUES.maintenance,
-    async (job: Job) => {
-      switch (job.data.task) {
-        case "recheck_evidence": {
-          const result = await runRecheckScheduler();
-          return result;
-        }
-        default:
-          logger.info({ task: job.data.task }, "maintenance task not implemented yet (PLAN.md Phases 6, 9)");
-      }
-    },
+    async (job: Job<JobPayloads["maintenance"]>) => runMaintenance(job.data.task),
     { connection },
   ),
 
   new Worker<JobPayloads["embeddings"]>(
     QUEUES.embeddings,
-    async (job: Job) => {
+    async (job: Job<JobPayloads["embeddings"]>) => {
       if (job.data.table === "remediation_library") await embedRemediationRow(job.data.id);
+      else await embedOpportunityRow(job.data.id);
     },
     { connection },
   ),
@@ -89,29 +98,30 @@ for (const w of workers) {
   w.on("completed", (job) => logger.info({ queue: w.name, jobId: job.id }, "job completed"));
 }
 
-async function start() {
-  // Nightly cohort refresh at 02:00 IST (§10.2).
-  await getQueue("ingestion").upsertJobScheduler(
-    "nightly-refresh",
-    { pattern: "0 2 * * *", tz: "Asia/Kolkata" },
-    { name: "ingestion", data: { source: "erp_nightly" } },
-  );
+// Nightly cohort refresh at 02:00 IST (§10.2).
+await getQueue("ingestion").upsertJobScheduler(
+  "nightly-refresh",
+  { pattern: "0 2 * * *", tz: "Asia/Kolkata" },
+  { name: "ingestion", data: { source: "erp_nightly" } },
+);
 
-  // Evidence recheck every day at 03:00 IST (§6.2, §15).
-  // The scheduler itself checks which artifacts are ≥30 days stale.
+// Scheduled maintenance (Asia/Kolkata): evidence re-checks, policy rollover, external-report sampling.
+for (const [name, pattern, task] of [
+  ["recheck-evidence", "0 3 * * *", "recheck_evidence"],
+  ["policy-rollover", "5 0 * * *", "policy_rollover"],
+  ["sample-external-mocks", "0 4 1 * *", "sample_external_mocks"],
+  ["quest-expiry", "30 0 * * *", "quest_expiry"],
+  ["wellbeing-scan", "15 3 * * *", "wellbeing_scan"],
+  ["weekly-digest", "0 8 * * 1", "weekly_digest"],
+  ["retention", "30 2 * * 0", "retention"],
+  ["sla-escalation", "0 * * * *", "sla_escalation"],
+] as const)
   await getQueue("maintenance").upsertJobScheduler(
-    "evidence-recheck",
-    { pattern: "0 3 * * *", tz: "Asia/Kolkata" },
-    { name: "maintenance", data: { task: "recheck_evidence" } },
+    name,
+    { pattern, tz: "Asia/Kolkata" },
+    { name: "maintenance", data: { task } },
   );
-
-  logger.info({ queues: Object.values(QUEUES) }, "workers started");
-}
-
-start().catch((err) => {
-  logger.error({ err }, "failed to start workers");
-  process.exit(1);
-});
+logger.info({ queues: Object.values(QUEUES) }, "workers started");
 
 const shutdown = async () => {
   await Promise.all(workers.map((w) => w.close()));

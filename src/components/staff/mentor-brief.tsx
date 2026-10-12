@@ -7,25 +7,25 @@ import { Info } from "lucide-react";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { EvidenceChip } from "@/components/ui/evidence-chip";
-import { score1 } from "@/lib/format";
 import { CONFIDENCE_NOTE, PERSONA_STAFF, TRACK_LABELS } from "@/lib/labels";
 import type { ApprovalRow } from "@/server/services/approvals";
+import type { Brief as BuiltBrief } from "@/server/services/brief";
 import type { studentBrief } from "@/server/services/students";
 import { DecisionForm } from "./decision-form";
 import { NarrativeText } from "./narrative-text";
 
 type Brief = Awaited<ReturnType<typeof studentBrief>>;
 
-export function MentorBrief({ row, brief }: { row: ApprovalRow; brief: Brief }) {
+/** Brief anchors point at sections of the student record (§12.2: each fact links to its source field). */
+const sectionOf = (anchor: string) => (anchor.startsWith("component-") ? "components" : anchor);
+
+export function MentorBrief({ row, brief, built }: { row: ApprovalRow; brief: Brief; built: BuiltBrief | null }) {
   const ev = brief.evaluation;
   const result = ev?.result;
   const persona = result?.personas.find((p) => p.persona === result.primaryPersona);
   const evidenceIds = new Map(brief.evidence.map((e) => [e.id, e.label]));
-  const facts = persona?.reasons.slice(0, 3) ?? [
-    `Track score ${score1(ev?.trackScore)} against readiness ${ev?.readiness}`,
-    `Gap ratio ${ev ? ev.gapRatio.toFixed(3) : "—"}`,
-    `Trend ${ev?.trend.toLowerCase()}`,
-  ];
+  const recordHref = (anchor: string) =>
+    `/admin/students/${brief.student.id}?reason=approval_decision#${sectionOf(anchor)}`;
 
   return (
     <Card aria-labelledby="brief-h" className="self-start">
@@ -53,23 +53,58 @@ export function MentorBrief({ row, brief }: { row: ApprovalRow; brief: Brief }) 
         </p>
       ) : null}
 
-      <ul className="mt-4 grid gap-2 sm:grid-cols-3">
-        {facts.map((f) => (
-          <li key={f} className="rounded-2xl bg-sand p-3 text-[0.92rem] font-semibold leading-snug">
-            {f}
-          </li>
-        ))}
-      </ul>
-
-      {result?.trackScore.dataGaps.length ? (
-        <div className="mt-5">
-          <h3 className="font-extrabold">Data gaps</h3>
-          <ul className="mt-1.5 list-disc pl-5 text-[0.95rem] text-ink-2">
-            {result.trackScore.dataGaps.map((g) => (
-              <li key={g}>{g}</li>
+      {built ? (
+        <>
+          <ol className="mt-4 grid gap-2 sm:grid-cols-3">
+            {built.facts.map((f) => (
+              <li key={f.source.field} className="rounded-2xl bg-sand p-3 text-[0.92rem] font-semibold leading-snug">
+                {f.text}
+                <Link
+                  href={recordHref(f.source.anchor)}
+                  className="mt-1.5 block text-sm font-bold text-act-hover hover:underline"
+                >
+                  {f.source.label}
+                </Link>
+              </li>
             ))}
-          </ul>
-        </div>
+          </ol>
+
+          {built.dataGaps.length ? (
+            <div className="mt-5">
+              <h3 className="font-extrabold">Data gaps</h3>
+              <ul className="mt-1.5 list-disc pl-5 text-[0.95rem] text-ink-2">
+                {built.dataGaps.map((g) => (
+                  <li key={`${g.source.field}-${g.text}`}>
+                    {g.text}{" "}
+                    <Link href={recordHref(g.source.anchor)} className="font-bold text-act hover:underline">
+                      {g.source.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="mt-5">
+            <h3 className="font-extrabold">Two questions to open with</h3>
+            <ol className="mt-1.5 list-decimal pl-5 text-[0.95rem]">
+              {built.questions.map((q) => (
+                <li key={q}>{q}</li>
+              ))}
+            </ol>
+          </div>
+
+          <div className="mt-5">
+            <h3 className="font-extrabold">Options</h3>
+            <ul className="mt-1.5 grid gap-1.5 text-[0.95rem]">
+              {built.pivot.options.map((o) => (
+                <li key={o.key}>
+                  <strong>{o.label}.</strong> <span className="text-ink-2">{o.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
       ) : null}
 
       <div className="mt-5 rounded-2xl bg-sand-2 p-4">

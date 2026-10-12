@@ -1,0 +1,51 @@
+name: CI
+
+# Phase 0 gate (PLAN.md): npm ci && npm run check && npm run build.
+# Postgres (pgvector) and Redis run as services on the same ports as docker-compose.yml,
+# so the database tests run for real; REQUIRE_DB makes a missing database a failure, not a skip.
+# End-to-end journeys and security scans have their own workflows.
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Lint, types, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REQUIRE_DB: "1"
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: aspiredge
+          POSTGRES_PASSWORD: aspiredge
+          POSTGRES_DB: aspiredge
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U aspiredge -d aspiredge"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build

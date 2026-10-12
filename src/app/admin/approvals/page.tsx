@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/shell/app-shell";
+import { ShadowHold } from "@/components/shell/shadow-hold";
 import { MentorBrief } from "@/components/staff/mentor-brief";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -13,14 +14,17 @@ import { dateTime, score1 } from "@/lib/format";
 import { ROUTE_LABELS, TRACK_SHORT } from "@/lib/labels";
 import { APPROVER_ROLES } from "@/server/auth/roles";
 import { requireUser } from "@/server/auth/session";
+import { getActivePolicy } from "@/server/policy/load";
 import { pendingApprovals } from "@/server/services/approvals";
+import { buildBrief } from "@/server/services/brief";
 import { studentBrief } from "@/server/services/students";
-import { workingDaysUntil } from "@/server/services/time";
+import { mayViewOutputs } from "@/server/shadow";
 
 export const metadata: Metadata = { title: "Approvals" };
 
 async function Queue({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
   const user = await requireUser(APPROVER_ROLES);
+  if (!mayViewOutputs(user)) return <ShadowHold />;
   const { id } = await searchParams;
   const rows = await pendingApprovals(user);
   const selected = rows.find((r) => r.id === id) ?? rows[0];
@@ -47,7 +51,7 @@ async function Queue({ searchParams }: { searchParams: Promise<{ id?: string }> 
         <h2 className="sr-only">Pending proposals</h2>
         <ul className="grid gap-1.5">
           {rows.map((r) => {
-            const due = workingDaysUntil(r.slaDueAt);
+            const due = r.workingDaysLeft;
             const active = r.id === selected?.id;
             return (
               <li key={r.id}>
@@ -87,7 +91,13 @@ async function Queue({ searchParams }: { searchParams: Promise<{ id?: string }> 
           })}
         </ul>
       </Card>
-      {selected && brief ? <MentorBrief row={selected} brief={brief} /> : null}
+      {selected && brief ? (
+        <MentorBrief
+          row={selected}
+          brief={brief}
+          built={brief.evaluation ? buildBrief(brief.evaluation.result, await getActivePolicy()) : null}
+        />
+      ) : null}
       <p className="text-sm text-ink-2 lg:col-span-2">
         <RefreshCw aria-hidden className="mr-1 inline size-3.5" />
         Latest evaluation {rows[0] ? dateTime(rows[0].createdAt) : "—"}. Check the import date before approving: a stale

@@ -11,10 +11,10 @@ describe("§3 Institutional Policy & Governance", () => {
     expect(policy.tracks.corporate_placement).toBeDefined();
   });
 
-  it("caches loaded policy file and allows clearing cache", () => {
+  it("caches loaded policy file and allows clearing cache", async () => {
     clearPolicyCache();
-    const p1 = getActivePolicy();
-    const p2 = getActivePolicy();
+    const p1 = await getActivePolicy();
+    const p2 = await getActivePolicy();
     expect(p1).toBe(p2);
   });
 

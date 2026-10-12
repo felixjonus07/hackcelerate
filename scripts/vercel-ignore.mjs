@@ -72,4 +72,3 @@ if (allSkippable) {
   console.log("App files changed — proceeding with build. ✓");
   process.exit(1); // exit 1 = BUILD
 }
-

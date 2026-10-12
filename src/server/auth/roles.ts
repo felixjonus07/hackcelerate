@@ -35,5 +35,8 @@ export function homeFor(role: Role): string {
   if (role === "student") return "/student/passport";
   if (APPROVER_ROLES.includes(role)) return "/admin/approvals";
   if (role === "auditor") return "/admin/audit-report";
+  if (role === "registrar") return "/admin/policy";
+  if (role === "ecell_coordinator") return "/admin/traction";
+  if (role === "sports_officer" || role === "alumni_mentor") return "/leaderboards";
   return "/admin/dashboard";
 }

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
+import { rolesOf } from "@/server/api/access";
 import { handle, json } from "@/server/api/handler";
-import { audit } from "@/server/audit/log";
 import { requireApiUser } from "@/server/auth/session";
 import { db } from "@/server/db";
 import { students } from "@/server/db/schema";
@@ -8,19 +8,10 @@ import { getPassport } from "@/server/services/passport";
 
 /** GET /api/v1/students/me/passport — latest evaluation, gap index, trend, breakdown (student only). */
 export const GET = handle(async () => {
-  const user = await requireApiUser(["student"]);
+  const user = await requireApiUser(rolesOf("passport"));
   const [s] = await db.select().from(students).where(eq(students.userId, user.id)).limit(1);
   if (!s) return json({ error: { code: "not_onboarded", message: "Finish onboarding first" } }, { status: 404 });
-  const p = await getPassport(s.id);
-  await audit({
-    actorUserId: user.id,
-    actorRole: user.role,
-    action: "passport.view",
-    entityType: "student",
-    entityId: s.pseudonymousId,
-    purpose: "self_access",
-    result: "allowed",
-  });
+  const p = await getPassport(s.id, user);
   const ev = p.evaluation;
   return json({
     student: s.pseudonymousId,
