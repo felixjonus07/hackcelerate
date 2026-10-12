@@ -156,6 +156,29 @@ npx playwright-cli resize 390 844                # mobile pass
 
 The journeys change data (onboarding completes, a quest is accepted, a proposal is approved), so `e2e/global-setup.ts` **reseeds the demo data at the start of every run**. It only does so on a local database and only when the suite starts its own app; set `E2E_NO_RESEED=1` to skip it. Journeys tagged `@stateful` run on the desktop project only.
 
+## Deployment (Railway)
+
+The app runs in the Railway project **aspiredge-ai**, environment **production**, at <https://aspiredge.up.railway.app>. Five services, all in Railway's Southeast Asia (Singapore) region:
+
+| Service | What it is | Notes |
+| --- | --- | --- |
+| `web` | Next.js app (`npm run build`, `npm run start`) | Domain `aspiredge.up.railway.app` → port 3100 (`PORT=3100`, matching the `start` script). Health check `/api/health`. Pre-deploy command `npm run db:migrate` applies the Drizzle migrations before a new version takes traffic |
+| `worker` | BullMQ workers and the nightly refresh | Start command `npx tsx src/workers/index.ts`. Not `npm run worker`, whose `--env-file=.env` fails where no `.env` file exists. No public domain |
+| `Postgres` | `pgvector/pgvector:pg17` (the image `docker-compose.yml` uses) | Railway's stock Postgres has no pgvector and migration `0000` runs `CREATE EXTENSION vector`. Volume at `/var/lib/postgresql/data`, `PGDATA` in a subfolder (a fresh volume has `lost+found`). Reached over the private network only |
+| `Redis` | Railway Redis | Sessions (Better Auth secondary storage), cache and BullMQ queues |
+
+Variables are set on the services, never committed (`.env*` stays gitignored):
+
+- `DATABASE_URL` is built from the `Postgres` service's private domain and password, `REDIS_URL` references `Redis`, so they follow the services if they are rebuilt. The `worker` reads the shared values from `web` by reference.
+- `APP_URL` and `BETTER_AUTH_URL` are `https://aspiredge.up.railway.app`. `BETTER_AUTH_SECRET` is generated for Railway and is not the local one.
+- `TRUSTED_IP_HEADER=x-real-ip`, the header Railway's edge documents for the client IP (rate limiting and lockout key on it).
+- `NODE_ENV` is not set by hand: Railpack sets it to `production` at runtime and installs dev dependencies for the build (the build needs Tailwind, TypeScript and the React Compiler, the worker needs `tsx`).
+- Optional integrations (`OPENROUTER_API_KEY`, `OIDC_*`, `GITHUB_*`, `S3_*`, `NOTIFY_EMAIL_WEBHOOK_URL`, …) are blank until set with `railway variable set <KEY> --service web` (and `--service worker` for the ones the worker uses). Without a model key, narratives use the rules-only fallback.
+
+**Deploys come from GitHub only.** `web` and `worker` are connected to `felixjonus07/hackcelerate`, branch `main`; every push to `main` builds and deploys both. Never upload local code with `railway up`. Connect a service with `railway service source connect --repo felixjonus07/hackcelerate --branch main --service <name>`. A fix reaches production only after it is merged to `main`. The `web` pre-deploy step migrates the database first, and a failed health check keeps the previous version serving.
+
+**Data residency:** the default in `docs/decisions.md` (item 5) is an India-region cloud. Railway has no India region, so the pilot runs in Singapore. Record the IT head's decision before real student data is loaded; only synthetic data is in this deployment.
+
 ## Environment variables
 
 See [`.env.example`](.env.example). Key ones: `DATABASE_URL`, `REDIS_URL`, `BETTER_AUTH_SECRET`, `DEMO_LOGIN_ENABLED`, `OIDC_*` (institution SSO), `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` (verify the slug before use), `OPENROUTER_EMBEDDING_MODEL`, `GITHUB_TOKEN`, `POLICY_FILE`, `S3_*` (private bucket for uploads; blank keeps them in `.local-data/uploads`), `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` (proves GitHub account ownership), `SHADOW_MODE` / `PROJECT_TEAM_EMAILS`, `NOTIFY_EMAIL_WEBHOOK_URL`, `WHATSAPP_*`, `ERP_EXPORT_FILE`.
@@ -307,6 +330,14 @@ Other docs: [`docs/dpdp-mapping.md`](docs/dpdp-mapping.md) (obligation → code 
 - **Staff side**: mentor brief on the approvals page, review form, policy editor, request form, audit report with sample card, student deep-dive anchors (`#score`, `#components`, `#personas`) that brief facts link to.
 - **Layout fixes found in review at 1440 and 390**: attendance table became a stacked list on phones, long policy keys wrap (`overflow-wrap:anywhere`), the audit report's stray `col-span` (which created an implicit column) was removed, and the detector advisory font size was reduced. No tokens, fonts, radii or shadows changed.
 - **Seed**: reviewer-queue items for the demo mentor, plus `student3@aspiredge.example`, a student who has not yet onboarded (it is the account the onboarding journey test walks through, so it ends up onboarded after a test run). Reseed with `npm run db:seed`.
+
+### 2026-10-12: Hosted on Railway (production)
+- **What**: the whole project now runs on Railway (project `aspiredge-ai`, environment `production`) at <https://aspiredge.up.railway.app>: `web`, `worker`, a pgvector `Postgres` and `Redis`. Layout, variables and deploy commands are in the new **Deployment (Railway)** section above. No application code, dependency, schema, route, design or folder changes.
+- **Database**: a new Postgres (`pgvector/pgvector:pg17`, persistent volume) was created in Railway. The local `DATABASE_URL`, and the `DATABASE_URL`/`DIRECT_URL` in `.env.production`, were left alone; Railway's `DATABASE_URL` is a reference to the new service's private address. All 12 migrations applied cleanly through the web service's pre-deploy command (`npm run db:migrate`).
+- **Domain**: the generated Railway domain was renamed to `aspiredge.up.railway.app` and routed to port 3100.
+- **Not done on purpose**: the database is **not seeded** and demo sign-in stays **off** (`DEMO_LOGIN_ENABLED` unset), as the security rules require ("never enable in production"). Until the institution's OIDC is configured or demo sign-in is switched on deliberately, nobody can sign in. To enable the synthetic demo: set `DEMO_LOGIN_ENABLED=true`, `ALLOW_DEMO_LOGIN_IN_PRODUCTION=true` and a 12+ character `DEMO_PASSWORD` on `web` and `worker`, then run `scripts/seed.ts` inside the Railway environment (the database has only a private address, so `railway run` from a laptop cannot reach it, and `npm run db:seed` expects a `.env` file the container does not have). The seed truncates app tables first.
+- **Open item**: hosting is in Singapore, not an India-region cloud (see `docs/decisions.md` item 5).
+- **Reader must run**: nothing for local development. Production deploys happen on push to `main` (GitHub integration, no direct uploads).
 
 ## Roadmap (post-freeze ideas go here)
 

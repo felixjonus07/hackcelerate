@@ -98,30 +98,38 @@ for (const w of workers) {
   w.on("completed", (job) => logger.info({ queue: w.name, jobId: job.id }, "job completed"));
 }
 
-// Nightly cohort refresh at 02:00 IST (§10.2).
-await getQueue("ingestion").upsertJobScheduler(
-  "nightly-refresh",
-  { pattern: "0 2 * * *", tz: "Asia/Kolkata" },
-  { name: "ingestion", data: { source: "erp_nightly" } },
-);
-
-// Scheduled maintenance (Asia/Kolkata): evidence re-checks, policy rollover, external-report sampling.
-for (const [name, pattern, task] of [
-  ["recheck-evidence", "0 3 * * *", "recheck_evidence"],
-  ["policy-rollover", "5 0 * * *", "policy_rollover"],
-  ["sample-external-mocks", "0 4 1 * *", "sample_external_mocks"],
-  ["quest-expiry", "30 0 * * *", "quest_expiry"],
-  ["wellbeing-scan", "15 3 * * *", "wellbeing_scan"],
-  ["weekly-digest", "0 8 * * 1", "weekly_digest"],
-  ["retention", "30 2 * * 0", "retention"],
-  ["sla-escalation", "0 * * * *", "sla_escalation"],
-] as const)
-  await getQueue("maintenance").upsertJobScheduler(
-    name,
-    { pattern, tz: "Asia/Kolkata" },
-    { name: "maintenance", data: { task } },
+// Not top-level await: the package is CommonJS by default, so tsx compiles this file as CJS and rejects it.
+async function registerSchedules() {
+  // Nightly cohort refresh at 02:00 IST (§10.2).
+  await getQueue("ingestion").upsertJobScheduler(
+    "nightly-refresh",
+    { pattern: "0 2 * * *", tz: "Asia/Kolkata" },
+    { name: "ingestion", data: { source: "erp_nightly" } },
   );
-logger.info({ queues: Object.values(QUEUES) }, "workers started");
+
+  // Scheduled maintenance (Asia/Kolkata): evidence re-checks, policy rollover, external-report sampling.
+  for (const [name, pattern, task] of [
+    ["recheck-evidence", "0 3 * * *", "recheck_evidence"],
+    ["policy-rollover", "5 0 * * *", "policy_rollover"],
+    ["sample-external-mocks", "0 4 1 * *", "sample_external_mocks"],
+    ["quest-expiry", "30 0 * * *", "quest_expiry"],
+    ["wellbeing-scan", "15 3 * * *", "wellbeing_scan"],
+    ["weekly-digest", "0 8 * * 1", "weekly_digest"],
+    ["retention", "30 2 * * 0", "retention"],
+    ["sla-escalation", "0 * * * *", "sla_escalation"],
+  ] as const)
+    await getQueue("maintenance").upsertJobScheduler(
+      name,
+      { pattern, tz: "Asia/Kolkata" },
+      { name: "maintenance", data: { task } },
+    );
+  logger.info({ queues: Object.values(QUEUES) }, "workers started");
+}
+
+registerSchedules().catch((err) => {
+  logger.error({ err: err instanceof Error ? err.message : String(err) }, "could not register job schedules");
+  process.exit(1);
+});
 
 const shutdown = async () => {
   await Promise.all(workers.map((w) => w.close()));
