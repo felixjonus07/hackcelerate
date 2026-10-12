@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { firstName } from "@/lib/format";
 import { homeFor, ROLE_LABELS } from "@/server/auth/roles";
 import { getCurrentUser } from "@/server/auth/session";
-import { demoLoginEnabled, env, oidcEnabled } from "@/server/env";
+import { demoLoginEnabled, env, oidcEnabled, signUpEnabled } from "@/server/env";
 import { SignInForm } from "./sign-in-form";
 import { SignOutHere } from "./sign-out-here";
 
@@ -46,6 +46,7 @@ async function Panel({ searchParams }: { searchParams: Promise<{ reason?: string
       reason={REASONS.includes(reason as Reason) ? (reason as Reason) : null}
       demo={demoLoginEnabled ? DEMO : []}
       oidc={oidcEnabled ? env.OIDC_PROVIDER_ID : null}
+      signUp={signUpEnabled}
       policy={{
         staffIdleMinutes: env.SESSION_STAFF_IDLE_MINUTES,
         studentIdleMinutes: env.SESSION_STUDENT_IDLE_MINUTES,

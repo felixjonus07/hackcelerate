@@ -17,6 +17,7 @@ import {
   Share2,
   SlidersHorizontal,
   Trophy,
+  UserCog,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -42,6 +43,7 @@ const ICONS = {
   policy: ScrollText,
   ingestion: Database,
   requests: ClipboardList,
+  users: UserCog,
   notices: Bell,
 };
 

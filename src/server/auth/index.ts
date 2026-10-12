@@ -18,10 +18,11 @@ import { eq } from "drizzle-orm";
 import { audit } from "../audit/log";
 import { db } from "../db";
 import * as schema from "../db/schema";
-import { demoLoginEnabled, env, isProduction, oidcEnabled } from "../env";
+import { demoLoginEnabled, env, isProduction, oidcEnabled, passwordAuthEnabled } from "../env";
 import { logger } from "../logger";
 import { endActivity, startActivity } from "./activity";
 import { MAX_SESSION_SECONDS, sessionPolicyConfig } from "./config";
+import { isDemoEmail, normalizeEmail } from "./demo";
 import { clearFailures, emailKey, lockedFor, recordFailure } from "./lockout";
 import { sessionPolicyFor } from "./session-policy";
 import { redisSecondaryStorage } from "./storage";
@@ -31,13 +32,22 @@ async function roleOf(userId: string): Promise<string> {
   return u?.role ?? "student";
 }
 
-async function roleByEmail(email: string): Promise<string | null> {
+async function stateByEmail(email: string): Promise<{ role: string; disabled: boolean } | null> {
   const [u] = await db
-    .select({ role: schema.user.role })
+    .select({ role: schema.user.role, disabledAt: schema.user.disabledAt })
     .from(schema.user)
-    .where(eq(schema.user.email, email.trim().toLowerCase()))
+    .where(eq(schema.user.email, normalizeEmail(email)))
     .limit(1);
-  return u?.role ?? null;
+  return u ? { role: u.role, disabled: u.disabledAt != null } : null;
+}
+
+async function isDisabled(userId: string): Promise<boolean> {
+  const [u] = await db
+    .select({ disabledAt: schema.user.disabledAt })
+    .from(schema.user)
+    .where(eq(schema.user.id, userId))
+    .limit(1);
+  return u?.disabledAt != null;
 }
 
 const safeAudit = (e: Parameters<typeof audit>[0]) =>
@@ -55,7 +65,9 @@ export const auth = betterAuth({
   }),
   secondaryStorage: redisSecondaryStorage,
   emailAndPassword: {
-    enabled: demoLoginEnabled,
+    // Demo accounts (DEMO_LOGIN_ENABLED) and people who signed up themselves (SIGNUP_ENABLED).
+    enabled: passwordAuthEnabled,
+    // There is no public sign-up endpoint: /sign-up runs a server action that creates the student record too.
     disableSignUp: true,
     minPasswordLength: 12,
     maxPasswordLength: 128,
@@ -65,6 +77,8 @@ export const auth = betterAuth({
     additionalFields: {
       // Roles come from directory groups in production (§13.2); never user-editable.
       role: { type: "string", required: false, defaultValue: "student", input: false },
+      // Set by the registrar (admin/users); a turned-off account cannot sign in.
+      disabledAt: { type: "date", required: false, input: false },
     },
   },
   session: {
@@ -99,6 +113,8 @@ export const auth = betterAuth({
       create: {
         // Apply the role's policy: absolute expiry and whether the device is trusted.
         before: async (session, ctx) => {
+          // Backstop for every sign-in path (password, institution SSO): a turned-off account gets no session.
+          if (await isDisabled(session.userId)) return false;
           const role = await roleOf(session.userId);
           const wantsTrusted = Boolean((ctx?.body as { rememberMe?: boolean } | undefined)?.rememberMe);
           const p = sessionPolicyFor(role, wantsTrusted, sessionPolicyConfig);
@@ -133,8 +149,29 @@ export const auth = betterAuth({
             message: `Too many failed attempts. Try again in ${minutes(locked)} minute${minutes(locked) === 1 ? "" : "s"}.`,
           });
         }
+        // Demo accounts follow DEMO_LOGIN_ENABLED, and turned-off accounts never sign in. Both answer exactly like a
+        // wrong password so the response does not reveal whether the account exists.
+        const state = email ? await stateByEmail(email) : null;
+        const blocked =
+          email && !demoLoginEnabled && isDemoEmail(email)
+            ? "sign_in.blocked_demo_off"
+            : state?.disabled
+              ? "sign_in.blocked_disabled"
+              : null;
+        if (blocked) {
+          await safeAudit({
+            actorUserId: "anonymous",
+            actorRole: "none",
+            action: blocked,
+            entityType: "account",
+            entityId: emailKey(email),
+            purpose: "authentication",
+            result: "denied",
+          });
+          throw new APIError("UNAUTHORIZED", { message: "Invalid email or password" });
+        }
         // Staff are never "remembered": shared office computers (§13.2).
-        const role = email ? await roleByEmail(email) : null;
+        const role = state?.role ?? null;
         if (role && role !== "student") return { context: { body: { ...(ctx.body as object), rememberMe: false } } };
       }
       if (ctx.path === "/sign-out") {

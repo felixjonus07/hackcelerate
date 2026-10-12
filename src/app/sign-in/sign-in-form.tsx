@@ -5,6 +5,7 @@
  * account exists (§13.2). Lockout and rate-limit messages come from the server.
  */
 import { Building2, Info } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ interface Props {
   reason: Reason | null;
   demo: { email: string; role: string; note: string }[];
   oidc: string | null;
+  signUp: boolean;
   policy: { staffIdleMinutes: number; studentIdleMinutes: number; trustedDays: number };
 }
 
@@ -32,7 +34,7 @@ const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
 
 const safeNext = (n: string | null) => (n?.startsWith("/") && !n.startsWith("//") ? n : null);
 
-export function SignInForm({ reason, demo, oidc, policy }: Props) {
+export function SignInForm({ reason, demo, oidc, signUp, policy }: Props) {
   const router = useRouter();
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -155,6 +157,14 @@ export function SignInForm({ reason, demo, oidc, policy }: Props) {
           {pending ? "Signing in…" : "Sign in"}
         </Button>
       </form>
+      {signUp ? (
+        <p className="mt-6 border-t border-line pt-5 text-[0.95rem] text-ink-2">
+          New student?{" "}
+          <Link href="/sign-up" className="font-bold text-act hover:underline">
+            Create an account
+          </Link>
+        </p>
+      ) : null}
     </div>
   );
 }

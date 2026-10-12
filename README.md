@@ -95,7 +95,8 @@ ERP / GitHub / Crossref / uploads → ingestion → verification (BullMQ)
 
 | Route | Who | Purpose |
 | --- | --- | --- |
-| `/sign-in` | everyone | Email + password (demo accounts prefill the email), institution SSO when configured, timeout reasons |
+| `/sign-in` | everyone | Email + password (demo accounts prefill the email), institution SSO when configured, timeout reasons, link to sign-up |
+| `/sign-up` | everyone signed out | Student self sign-up: name, email, department, year, password. Creates the account and the student record, signs the student in and opens onboarding. Closed with `SIGNUP_ENABLED=false` |
 | `/account/security` | everyone signed in | Session limits, other devices with remote sign-out, password change |
 | `/student/passport` | student | Score vs readiness, gap, trend, next step (with its score value), quests, evidence, score breakdown |
 | `/student/what-if` | student | Live simulator on the same engine; writes nothing |
@@ -111,6 +112,7 @@ ERP / GitHub / Crossref / uploads → ingestion → verification (BullMQ)
 | `/admin/policy` | registrar | Policy versions: draft, approvals, activate |
 | `/admin/ingestion` | registrar | ERP import runs and data quality |
 | `/admin/requests` | registrar, mentor | Students' access, correction and erasure requests |
+| `/admin/users` | registrar | Search and filter accounts, add a staff member, change a staff role, turn an account on or off, sign someone out everywhere. Every change and every directory read is audited |
 | `/admin/approvals` | mentor, class advisor, placement | Queue + one-page mentor brief + approve / edit / reject |
 | `/admin/dashboard` | mentor, HOD, dean | Command Center aggregates (donut, AEG matrix, trend) |
 | `/admin/counseling-kanban` | mentor | Kanban with keyboard and drag moves, WIP limit, reasons for backward moves |
@@ -131,10 +133,13 @@ The REST API under `/api/v1` mirrors §11 (see `src/app/api/v1`). `GET /api/heal
 | CSRF / origin | Better Auth origin check against `APP_URL`; cross-origin POSTs get 403 | `trustedOrigins` |
 | Sessions UI | `/account/security`: this session's limits, other devices with remote sign-out, "sign out everywhere else", password change (revokes other sessions) | `src/app/account/security` |
 | Audit | Sign-in success, failure, lockout, sign-out, idle timeout, revocations and password changes go to `audit_events` (emails stored only as a hash) | `audit_events` |
+| Sign-up | There is **no public Better Auth sign-up endpoint** (`disableSignUp`); `/sign-up` is a server action that always creates a `student`, never takes a role from the request, creates the student record in the same step, allows `AUTH_SIGNUP_RATE_PER_HOUR` accounts per address per hour, answers a repeat or reserved email like any other failure, and audits every outcome | `src/server/services/signup.ts` |
+| Demo accounts | They all use the reserved `@aspiredge.example` domain. While `DEMO_LOGIN_ENABLED` is off they are refused (and audited) like a wrong password even though password sign-in is on for people who signed up; nobody can sign up on that domain | `src/server/auth/demo.ts`, `index.ts` |
+| Turned-off accounts | A registrar can turn an account off: no sign-in (same answer as a wrong password), no new session on any path including institution SSO, and every open session is ended at once. Role changes end sessions too, because Redis caches the role with the session | `src/server/auth/revoke.ts`, `session.ts` |
 | Headers | CSP (scripts keep `'unsafe-inline'`: a per-request nonce cannot work with Cache Components, see `next.config.ts`), HSTS (production), `X-Frame-Options: DENY`, `Permissions-Policy`, COOP, no `X-Powered-By`; protected pages `Cache-Control: private, no-store` | `next.config.ts`, `src/proxy.ts` |
 | Secrets | App refuses to start in production with the dev `BETTER_AUTH_SECRET` | `src/server/env.ts` |
 
-All limits are env-configurable (`SESSION_*`, `AUTH_*`; see `.env.example`). Behind a reverse proxy, set `TRUSTED_IP_HEADER` to the header the proxy sets, so clients can't spoof their IP to dodge rate limits.
+All limits are env-configurable (`SESSION_*`, `AUTH_*`, `SIGNUP_ENABLED`; see `.env.example`). Behind a reverse proxy, set `TRUSTED_IP_HEADER` to the header the proxy sets, so clients can't spoof their IP to dodge rate limits.
 
 ## Reviewing pages with the Playwright CLI
 
@@ -346,6 +351,16 @@ Other docs: [`docs/dpdp-mapping.md`](docs/dpdp-mapping.md) (obligation → code 
 - **Worker Redis connection** (`src/workers/index.ts`): `createRedis()` sets a 3 s command timeout and stops reconnecting after 3 tries, which suits web requests but made every blocking BullMQ call fail (`Command timed out`, 25 times in 20 s locally). The worker's own connection now has no command timeout and keeps retrying.
 - **Demo sign-in switch**: `DEMO_LOGIN_ENABLED` is the on/off switch on `web`, with `ALLOW_DEMO_LOGIN_IN_PRODUCTION=true` as the standing production opt-in. It is `true` now: the production database was seeded with the 60 synthetic students and the 13 demo accounts.
 - **Known**: `npm run check` has one failure that is not part of this change (`policy-admin.test.ts` hardcodes `effective_from = "2026-10-12"` as "tomorrow") and `drizzle.config.ts` has a Biome formatting error from the Supabase commit.
+
+### 2026-10-12: Student sign-up and registrar user management
+- **`/sign-up`** (new): a student creates their own account with name, email, department, year and a password of 12+ characters. `signUpStudent` (`src/server/services/signup.ts`) creates the user as `student`, the minimal `students` + `student_identities` record (a pseudonymous ID derived from the user id, a placeholder roll number until the ERP import attaches the real one) and an audit event, then the form signs the student in and opens `/student/onboarding`. A link appears on `/sign-in` while sign-up is open.
+- **Switch**: `SIGNUP_ENABLED` (default `true`; `false` closes registration and hides the link) and `AUTH_SIGNUP_RATE_PER_HOUR` (default 5 accounts per network address per hour). Both are in `.env.example`. Email + password sign-in is now on when either demo login or sign-up is on (`passwordAuthEnabled`); institution SSO is unchanged.
+- **Demo switch still holds**: seeded `@aspiredge.example` accounts are refused while `DEMO_LOGIN_ENABLED` is off, and nobody can register on that domain.
+- **`/admin/users`** (new, registrar only, "Users" in the navigation): search by name or email, filter by role and status, add a staff member with a first password, change a staff role, turn an account on or off, sign someone out everywhere. Guards: no changes to your own account, student accounts keep the student role, at least one active registrar must remain. Each change and each directory read writes an audit event (`user.created`, `user.role_changed`, `user.disabled`, `user.enabled`, `user.sessions_revoked`, `users.list`); a role change or turning an account off ends that person's sessions.
+- **Schema**: migration `0012_user_disabled_at.sql` adds a nullable `user.disabled_at`. Production applies it through the `web` pre-deploy step; locally run `npm run db:migrate`.
+- **Fix found by the new tests**: the "is this a student?" subquery in `users.ts` must qualify `"user"."id"`, otherwise Drizzle renders a bare `"id"` that resolves to `students.id`.
+- **Tests**: `signup.test.ts` and `users.test.ts` (12 tests, real database). `npm run check` still has the known date-dependent `policy-admin` failure, and the `staff-and-notices` suite can fail on a race with other test files that share the database; both failed before this change.
+- **Reviewed** with the Playwright CLI at 1440 and 390 (no overflow, no console errors) and on a production build; the impeccable detector reports only the `2.4rem` mobile hero size, the same as the existing sign-in hero. `drizzle.config.ts` was reformatted by Biome (whitespace only), which clears the lint error from the Supabase commit.
 
 ## Roadmap (post-freeze ideas go here)
 

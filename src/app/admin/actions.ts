@@ -6,13 +6,14 @@ import { z } from "zod";
 import { audit } from "@/server/audit/log";
 import { APPROVER_ROLES } from "@/server/auth/roles";
 import { requireUser } from "@/server/auth/session";
-import { COUNSELING_COLUMNS } from "@/server/db/schema/enums";
+import { COUNSELING_COLUMNS, ROLES } from "@/server/db/schema/enums";
 import { decide } from "@/server/services/approvals";
 import { moveCard } from "@/server/services/counseling";
 import { runEvaluation } from "@/server/services/evaluations";
 import { approveVersion, createDraft, PolicyError } from "@/server/services/policy-admin";
 import { ErasureError, executeErasure } from "@/server/services/retention";
 import { RightsError, resolveRequest } from "@/server/services/rights";
+import { changeRole, createStaffUser, setDisabled, signOutEverywhere, UserAdminError } from "@/server/services/users";
 import {
   confirmInternship,
   ReviewError,
@@ -222,4 +223,74 @@ export async function resolveRightsRequest(_: unknown, form: FormData): Promise<
   }
   revalidatePath("/admin/requests");
   return { ok: true, message: "Closed. The student has been told." };
+}
+
+// ── User management (registrar only). The service re-checks the role and audits every change. ──
+
+type UserResult = { ok: boolean; message: string };
+
+async function userAdmin(
+  run: (actor: Awaited<ReturnType<typeof requireUser>>) => Promise<string>,
+): Promise<UserResult> {
+  const actor = await requireUser(["registrar"]);
+  try {
+    const message = await run(actor);
+    revalidatePath("/admin/users");
+    return { ok: true, message };
+  } catch (e) {
+    if (e instanceof UserAdminError) return { ok: false, message: e.message };
+    throw e;
+  }
+}
+
+const staffInput = z.object({
+  name: z.string().trim().min(2).max(80),
+  email: z.email().max(254),
+  role: z.enum(ROLES),
+  password: z.string().min(12).max(128),
+});
+
+export async function addStaffUser(_: unknown, form: FormData): Promise<UserResult> {
+  const parsed = staffInput.safeParse({
+    name: form.get("name"),
+    email: form.get("email"),
+    role: form.get("role"),
+    password: form.get("password"),
+  });
+  if (!parsed.success)
+    return { ok: false, message: "Check the name, a valid email, a role, and a password of 12 or more characters." };
+  return userAdmin(async (actor) => {
+    await createStaffUser(actor, parsed.data);
+    return `Added ${parsed.data.name}. Share the password with them securely; they can change it in their account.`;
+  });
+}
+
+const idInput = z.object({ id: z.string().min(1).max(64) });
+
+export async function changeUserRole(_: unknown, form: FormData): Promise<UserResult> {
+  const parsed = idInput.extend({ role: z.enum(ROLES) }).safeParse({ id: form.get("id"), role: form.get("role") });
+  if (!parsed.success) return { ok: false, message: "Choose a role first." };
+  return userAdmin(async (actor) => {
+    await changeRole(actor, parsed.data.id, parsed.data.role);
+    return "Role updated. They were signed out and will get the new access when they sign in again.";
+  });
+}
+
+export async function toggleUserAccount(_: unknown, form: FormData): Promise<UserResult> {
+  const parsed = idInput.extend({ off: z.enum(["yes", "no"]) }).safeParse({ id: form.get("id"), off: form.get("off") });
+  if (!parsed.success) return { ok: false, message: "Reload the page and try again." };
+  const off = parsed.data.off === "yes";
+  return userAdmin(async (actor) => {
+    await setDisabled(actor, parsed.data.id, off);
+    return off ? "Account turned off and signed out everywhere." : "Account turned back on.";
+  });
+}
+
+export async function signOutUserEverywhere(_: unknown, form: FormData): Promise<UserResult> {
+  const parsed = idInput.safeParse({ id: form.get("id") });
+  if (!parsed.success) return { ok: false, message: "Reload the page and try again." };
+  return userAdmin(async (actor) => {
+    const n = await signOutEverywhere(actor, parsed.data.id);
+    return n ? `Signed out of ${n} session${n === 1 ? "" : "s"}.` : "They had no open sessions.";
+  });
 }

@@ -85,6 +85,13 @@
       "when": 1791745407999,
       "tag": "0011_restricted_analytics_role",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791777227938,
+      "tag": "0012_user_disabled_at",
+      "breakpoints": true
     }
   ]
 }

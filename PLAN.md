@@ -227,6 +227,7 @@ The reference plan suggests a Python/FastAPI backend (§10.1). **The user fixed 
 - [x] Audit report: printable, policy version + draft warning, aggregates + sampled records (§12.3)
 - [x] Registrar: policy editor (draft → two approvals → activate), ingestion status
 - [x] Notifications: weekly digests, WhatsApp templates (opt-in)
+- [x] Student self sign-up (`/sign-up`, switch `SIGNUP_ENABLED`) and registrar user management (`/admin/users`: add staff, change role, turn an account on or off, sign out everywhere)
 
 **Exit gate:** e2e "audit export" journey passes; Command Center never shows an individual record (test).
 

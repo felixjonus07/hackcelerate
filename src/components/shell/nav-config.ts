@@ -23,6 +23,7 @@ export interface NavItem {
     | "policy"
     | "ingestion"
     | "requests"
+    | "users"
     | "notices";
 }
 
@@ -53,6 +54,7 @@ export function staffNav(role: Role): NavItem[] {
   if (role === "registrar") {
     add("/admin/ingestion", "Data imports", "ingestion", "Imports");
     add("/admin/requests", "Data requests", "requests", "Requests");
+    add("/admin/users", "Users", "users");
   }
   if (role === "faculty_mentor") add("/admin/requests", "Data requests", "requests", "Requests");
   add("/leaderboards", "Leaderboards", "leaderboard");

@@ -6,6 +6,12 @@ const bool = z
   .optional()
   .transform((v) => v === "true" || v === "1");
 
+/** Like `bool`, but an unset or empty value means true. */
+const boolDefaultTrue = z
+  .enum(["true", "false", "1", "0", ""])
+  .optional()
+  .transform((v) => v === undefined || v === "" || v === "true" || v === "1");
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   APP_URL: z.url().default("http://localhost:3100"),
@@ -17,6 +23,10 @@ const schema = z.object({
   DEMO_LOGIN_ENABLED: bool,
   /** Demo accounts are refused in production unless this is also set. */
   ALLOW_DEMO_LOGIN_IN_PRODUCTION: bool,
+  /** Self-service student sign-up (/sign-up). On unless set to false; false closes registration. */
+  SIGNUP_ENABLED: boolDefaultTrue,
+  /** New accounts one address may create per hour (brute-force and spam protection). */
+  AUTH_SIGNUP_RATE_PER_HOUR: z.coerce.number().int().min(1).default(5),
   /** Header your reverse proxy sets with the client IP (used for rate limiting). */
   TRUSTED_IP_HEADER: z.string().default("x-forwarded-for"),
   // Session timeouts (§13.2). Idle = no request for this long; max = absolute lifetime.
@@ -78,6 +88,9 @@ export const env = schema
   .parse(process.env);
 export const demoLoginEnabled =
   env.DEMO_LOGIN_ENABLED && (env.NODE_ENV !== "production" || env.ALLOW_DEMO_LOGIN_IN_PRODUCTION);
+/** Email + password works for demo accounts and for people who signed up themselves. */
+export const signUpEnabled = env.SIGNUP_ENABLED;
+export const passwordAuthEnabled = demoLoginEnabled || signUpEnabled;
 export const isProduction = env.NODE_ENV === "production";
 export const oidcEnabled = Boolean(env.OIDC_DISCOVERY_URL && env.OIDC_CLIENT_ID);
 export const s3Enabled = Boolean(env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY);

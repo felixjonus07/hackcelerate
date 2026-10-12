@@ -60,6 +60,8 @@ const readSession = cache(async (): Promise<SessionState> => {
     return { status: "none" };
   }
   if (!s) return { status: "none" };
+  // A turned-off account is signed out even if an old session was cached (admin/users also revokes them).
+  if ((s.user as { disabledAt?: unknown }).disabledAt) return { status: "none" };
 
   const activity: ActivityRecord | null = await touchActivity(s.session.id);
   if (!activity) {
